@@ -35,7 +35,7 @@ const THROTTLE_MS = 1100
 
 export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onApplied: () => Promise<void> }) {
   const [phase, setPhase] = useState<Phase>('idle')
-  const [includeNew, setIncludeNew] = useState(true)
+  const [mode, setMode] = useState<'insert' | 'update' | 'both'>('both')
   const [progress, setProgress] = useState({ done: 0, total: 0, label: '' })
   const [updates, setUpdates] = useState<UpdateItem[]>([])
   const [news, setNews] = useState<NewItem[]>([])
@@ -53,9 +53,11 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
     setNews([])
     setErrors([])
     const byName = new Map(entries.map((e) => [e.name_en.toLowerCase(), e]))
+    const doExisting = mode !== 'insert'
+    const doNew = mode !== 'update'
 
     let candidates: string[] = []
-    if (includeNew) {
+    if (doNew) {
       setProgress({ done: 0, total: 0, label: 'Liste des animaux du wiki…' })
       try {
         const titles = await listAnimalPages()
@@ -70,22 +72,26 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
       }
     }
 
-    const total = entries.length + candidates.length
+    const total = (doExisting ? entries.length : 0) + candidates.length
     const upd: UpdateItem[] = []
     const nw: NewItem[] = []
     const errs: { name: string; reason: string }[] = []
     let done = 0
 
-    const handle = async (label: string, url: string, existing?: AnimalEntry) => {
+    // allowUpdate: record field changes when the page matches an existing animal.
+    const handle = async (label: string, url: string, existing: AnimalEntry | undefined, allowUpdate: boolean) => {
       setProgress({ done, total, label })
       try {
         const { animal: w, variants } = await fetchWikiAnimal(url, knownBiomes)
         const match = existing ?? (w.name_en ? byName.get(String(w.name_en).toLowerCase()) : undefined)
         if (match) {
-          const diff = diffAnimal(match, w)
-          if (Object.keys(diff).length || variants.length) {
-            upd.push({ id: match.id, name: match.name_en, diff, variants })
+          if (allowUpdate) {
+            const diff = diffAnimal(match, w)
+            if (Object.keys(diff).length || variants.length) {
+              upd.push({ id: match.id, name: match.name_en, diff, variants })
+            }
           }
+          // insert-only: a candidate that already exists is simply skipped.
         } else {
           nw.push({ title: label, name: String(w.name_en ?? label), wiki: w, variants, selected: true })
         }
@@ -96,8 +102,8 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
       await sleep(THROTTLE_MS)
     }
 
-    for (const e of entries) await handle(e.name_en, urlForEntry(e), e)
-    for (const t of candidates) await handle(t, urlForTitle(t))
+    if (doExisting) for (const e of entries) await handle(e.name_en, urlForEntry(e), e, true)
+    for (const t of candidates) await handle(t, urlForTitle(t), undefined, mode === 'both')
 
     setUpdates(upd)
     setNews(nw)
@@ -159,13 +165,21 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
 
       {phase === 'idle' && (
         <>
-          <label className="admin-check">
-            <input type="checkbox" checked={includeNew} onChange={(e) => setIncludeNew(e.target.checked)} />
-            Chercher aussi les nouveaux animaux (énumère la catégorie du wiki)
+          <label>
+            Mode
+            <select value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}>
+              <option value="both">Ajouter + mettre à jour</option>
+              <option value="insert">Ajouter les nouveaux seulement</option>
+              <option value="update">Mettre à jour les existants seulement</option>
+            </select>
           </label>
           <p className="muted">
-            Resynchronise les {entries.length} animaux existants depuis le wiki et propose un récap avant
-            d'écrire. ~1 requête/s, donc plusieurs minutes. name_fr et coat_name_fr sont préservés.
+            {mode === 'insert'
+              ? 'Énumère le wiki et ne télécharge que les pages absentes de ta base — rapide, idéal après une release.'
+              : mode === 'update'
+                ? `Retélécharge les ${entries.length} animaux existants pour les mettre à jour (plusieurs minutes).`
+                : `Les deux : ${entries.length} existants + les nouveaux du wiki.`}{' '}
+            Rien n'est écrit avant validation. name_fr / coat_name_fr préservés. ~1 req/s.
           </p>
           <button onClick={analyze}>Analyser</button>
         </>
