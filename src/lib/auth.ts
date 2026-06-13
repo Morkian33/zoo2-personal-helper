@@ -29,6 +29,8 @@ export async function secureAccount(opts: {
   password: string
   recoveryEmail?: string
 }): Promise<void> {
+  // Guarantee a session to convert (e.g. if signed out, start an anonymous one first).
+  await ensureAnonymousSession()
   const { error } = await supabase.auth.updateUser({
     email: usernameToEmail(opts.username),
     password: opts.password,

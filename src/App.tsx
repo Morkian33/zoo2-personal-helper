@@ -12,7 +12,13 @@ export default function App() {
   useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, s) => setSession(s))
+    } = supabase.auth.onAuthStateChange((event, s) => {
+      setSession(s)
+      // Stay functional after logout: re-establish an anonymous session.
+      if (event === 'SIGNED_OUT') {
+        ensureAnonymousSession().catch((e) => console.error('Re-anonymous failed', e))
+      }
+    })
 
     ensureAnonymousSession()
       .catch((e) => console.error('Anonymous sign-in failed', e))
