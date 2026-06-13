@@ -13,7 +13,7 @@ export function LoginForm() {
     setStatus(null)
     try {
       await login(username, password)
-      // onAuthStateChange (SIGNED_IN) bascule l'UI vers l'état connecté.
+      // onAuthStateChange (SIGNED_IN) switches the UI to the signed-in state.
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Identifiant ou mot de passe invalide')
     } finally {

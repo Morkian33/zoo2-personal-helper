@@ -1,35 +1,63 @@
 # zoo2-personal-helper
 
-Petite app web (React + Vite + TypeScript) avec authentification Supabase.
+Companion app for **Zoo 2: Animal Park**: an animal catalog with decision metrics
+(XP/hour per size, breeding and resale economics…) and personal tracking
+(owned / breeding unlocked). React + Vite + TypeScript, data and auth via Supabase.
 
-## Modèle d'authentification
+The UI is in French; the codebase is in English.
 
-- À l'arrivée, une **session anonyme** est créée automatiquement → l'app est utilisable sans inscription.
-- Un formulaire **« Sécuriser mon compte »** convertit ce compte anonyme en compte permanent : `identifiant` + `mot de passe` + `email` (optionnel).
-- L'identifiant est l'ancrage du login. Supabase exigeant un email pour un compte mot de passe, on dérive un email interne stable (`identifiant@users.zoo2.local`). L'email réel optionnel est conservé en metadata (`recovery_email`) pour la **récupération de mot de passe à terme**.
+## Data & computations
 
-## Prérequis Supabase
+- **Shared catalog** (`public.animals`, ~478 base animals): raw game data, readable by
+  every account, written via the SQL Editor (admin). Variants not included yet.
+- **Personal layer** (`public.user_animals`): `owned` / `breeding_unlocked` per account
+  (RLS on `auth.uid()`).
+- **Metrics recomputed in-app** from the raw data — no derived value is stored:
+  - `src/lib/enclosure.ts`: enclosure optimization (tile = 16, enclosure ≥ 9 tiles,
+    `size effective = T*16/N`).
+  - `src/lib/breeding.ts`: average number of attempts (failure increment = `min(base, 10pts)`).
+  Both models are verified identical to the original Google Sheet.
 
-Dans le dashboard du projet Supabase :
+## Database setup (once)
 
-1. **Authentication → Sign In / Providers → Anonymous sign-ins** : activer.
-2. **Authentication → Sign In / Providers → Email** : **désactiver « Confirm email »** (l'upgrade utilise un email interne non délivrable, qui doit s'appliquer sans confirmation).
-3. **Project Settings → API** : récupérer `Project URL` et `anon public key`.
+In Supabase → **SQL Editor**, run in order:
+1. `supabase/schema.sql` — creates the `animals` / `user_animals` tables + RLS.
+2. `supabase/seed.sql` — imports the catalog (~478 animals).
 
-## Lancer en local
+## Authentication model
+
+- On arrival, an **anonymous session** is created automatically → the app is usable
+  without signing up.
+- A **"secure my account"** form upgrades the anonymous account to a permanent one:
+  `username` + `password` + optional `email`.
+- The username is the login anchor. Since Supabase requires an email for a password
+  account, a stable internal email is derived (`username@users.zoo2.local`). The optional
+  real email is kept in metadata (`recovery_email`) for **future password recovery**.
+
+## Supabase prerequisites
+
+In the Supabase project dashboard:
+
+1. **Authentication → Sign In / Providers → Anonymous sign-ins**: enable.
+2. **Authentication → Sign In / Providers → Email**: **disable "Confirm email"** (the
+   upgrade uses a non-deliverable internal email that must apply without confirmation).
+3. **Project Settings → API**: grab the `Project URL` and the publishable/anon key.
+
+## Run locally
 
 ```bash
-cp .env.example .env   # renseigner VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY
+cp .env.example .env   # set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
 npm install
 npm run dev
 ```
 
-## Déploiement (GitHub Pages)
+## Deployment (GitHub Pages)
 
-Le workflow `.github/workflows/deploy.yml` build et publie sur Pages à chaque push sur `main`.
+The `.github/workflows/deploy.yml` workflow builds and publishes to Pages on every push to `main`.
 
-1. **Settings → Pages → Build and deployment → Source : GitHub Actions**.
-2. **Settings → Secrets and variables → Actions → Variables** : ajouter les *repository variables*
-   `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY` (l'anon key est publique par design, protégée par la RLS Supabase).
+1. **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+2. **Settings → Secrets and variables → Actions → Variables**: add the repository variables
+   `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (the anon key is public by design,
+   protected by Supabase RLS).
 
-URL publiée : `https://morkian33.github.io/zoo2-personal-helper/`
+Published URL: `https://morkian33.github.io/zoo2-personal-helper/`

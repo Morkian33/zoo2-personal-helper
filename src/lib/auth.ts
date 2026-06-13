@@ -1,8 +1,8 @@
 import { supabase } from './supabase'
 
-// L'identifiant choisi par l'utilisateur est l'ancrage du login. Supabase exige
-// un email pour un compte mot de passe, donc on en dérive un email interne stable.
-// L'email réel (optionnel) est conservé à part, pour la récupération « à terme ».
+// The username chosen by the user is the login anchor. Supabase requires an email
+// for a password account, so we derive a stable internal email from it. The optional
+// real email is kept separately, for future password recovery.
 const INTERNAL_EMAIL_DOMAIN = 'users.zoo2.local'
 
 export function usernameToEmail(username: string): string {
@@ -10,7 +10,7 @@ export function usernameToEmail(username: string): string {
   return `${slug}@${INTERNAL_EMAIL_DOMAIN}`
 }
 
-/** Garantit une session : crée un utilisateur anonyme si aucune session active. */
+// Ensures a session exists: creates an anonymous user if there is none.
 export async function ensureAnonymousSession(): Promise<void> {
   const {
     data: { session },
@@ -21,7 +21,7 @@ export async function ensureAnonymousSession(): Promise<void> {
   if (error) throw error
 }
 
-/** Convertit l'utilisateur anonyme courant en compte permanent (identifiant + mot de passe). */
+// Upgrades the current (anonymous) user to a permanent account (username + password).
 export async function secureAccount(opts: {
   username: string
   password: string
@@ -38,7 +38,7 @@ export async function secureAccount(opts: {
   if (error) throw error
 }
 
-/** Connexion d'un utilisateur existant via son identifiant + mot de passe. */
+// Signs in an existing user with their username + password.
 export async function login(username: string, password: string): Promise<void> {
   const { error } = await supabase.auth.signInWithPassword({
     email: usernameToEmail(username),

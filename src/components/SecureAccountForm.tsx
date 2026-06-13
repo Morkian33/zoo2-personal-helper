@@ -14,7 +14,7 @@ export function SecureAccountForm() {
     setStatus(null)
     try {
       await secureAccount({ username, password, recoveryEmail: email || undefined })
-      // onAuthStateChange (USER_UPDATED) bascule l'UI vers l'état connecté.
+      // onAuthStateChange (USER_UPDATED) switches the UI to the signed-in state.
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Erreur inconnue')
     } finally {
