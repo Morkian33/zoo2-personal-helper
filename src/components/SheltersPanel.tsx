@@ -1,4 +1,5 @@
-import type { ShelterLevels } from '../lib/types'
+import { biomeLabel } from '../lib/labels'
+import type { ShelterLevels, BiomeLabels } from '../lib/types'
 
 const LEVELS = [0, 1, 2, 3]
 
@@ -6,11 +7,13 @@ const LEVELS = [0, 1, 2, 3]
 export function SheltersPanel({
   biomes,
   shelters,
+  biomeLabels,
   disabled,
   onSet,
 }: {
   biomes: string[]
   shelters: ShelterLevels
+  biomeLabels: BiomeLabels
   disabled: boolean
   onSet: (biome: string, level: number | null) => void
 }) {
@@ -23,7 +26,7 @@ export function SheltersPanel({
           const level = shelters.get(b)
           return (
             <label key={b} className="shelter-row">
-              <span>{b}</span>
+              <span>{biomeLabel(biomeLabels, b)}</span>
               <select
                 value={level == null ? '' : String(level)}
                 disabled={disabled}

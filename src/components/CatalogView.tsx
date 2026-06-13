@@ -120,7 +120,13 @@ export function CatalogView({ userId }: { userId: string | null }) {
 
       {tab === 'zoo' && (
         <div className="myzoo">
-          <SheltersPanel biomes={shelterBiomes} shelters={shelters} disabled={!userId} onSet={setShelter} />
+          <SheltersPanel
+            biomes={shelterBiomes}
+            shelters={shelters}
+            biomeLabels={biomeLabels}
+            disabled={!userId}
+            onSet={setShelter}
+          />
           <InventoryTable
             entries={entries}
             shelters={shelters}
