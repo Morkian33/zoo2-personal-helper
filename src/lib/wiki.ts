@@ -199,8 +199,11 @@ export async function fetchWikiAnimal(url: string, knownBiomes: string[] = []): 
   if (!res.ok) throw new Error(`Wiki HTTP ${res.status}`)
   const data = await res.json()
   if (data.error) throw new Error(data.error.info ?? 'Page introuvable')
-  const wt: string = data.parse.wikitext
+  return parseWikitext(data.parse.wikitext, knownBiomes)
+}
 
+// Parses a page's wikitext into an animal + its variants (no network).
+export function parseWikitext(wt: string, knownBiomes: string[] = []): WikiResult {
   const ib = parseTemplate(wt, 'Example')
   if (!ib) throw new Error('Infobox introuvable sur la page')
 

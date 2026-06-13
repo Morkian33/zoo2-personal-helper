@@ -1,4 +1,5 @@
-import { fetchWikiAnimal, wikiTitleFromUrl } from './wiki'
+import { fetchWikiAnimal, wikiTitleFromUrl, parseWikitext } from './wiki'
+import type { WikiResult } from './wiki'
 import type { AnimalEntry, AnimalRow } from './types'
 
 const API = 'https://zoo2animalpark.fandom.com/api.php'
@@ -62,6 +63,62 @@ export async function listAnimalPages(): Promise<string[]> {
     if (!cont) break
   }
   return titles
+}
+
+export interface BatchItem {
+  title: string
+  result?: WikiResult
+  error?: string
+}
+
+const BATCH_SIZE = 50
+const BATCH_DELAY_MS = 300
+
+// Fetches the wikitext of many pages in batches of 50 (one request each) and parses
+// them. Far fewer requests than one-per-page. `onProgress(done)` reports pages handled.
+export async function fetchWikiBatch(
+  titles: string[],
+  knownBiomes: string[],
+  onProgress?: (done: number) => void,
+): Promise<BatchItem[]> {
+  const out: BatchItem[] = []
+  let done = 0
+  for (let i = 0; i < titles.length; i += BATCH_SIZE) {
+    const chunk = titles.slice(i, i + BATCH_SIZE)
+    const p = new URLSearchParams({
+      action: 'query', format: 'json', formatversion: '2',
+      prop: 'revisions', rvprop: 'content', rvslots: 'main',
+      titles: chunk.join('|'), redirects: '1', origin: '*',
+    })
+    try {
+      const res = await fetch(`${API}?${p.toString()}`)
+      if (!res.ok) throw new Error(`Wiki HTTP ${res.status}`)
+      const d = await res.json()
+      for (const pg of d.query?.pages ?? []) {
+        const title = pg.title as string
+        if (pg.missing) {
+          out.push({ title, error: 'page manquante' })
+          continue
+        }
+        const wt: string | undefined = pg.revisions?.[0]?.slots?.main?.content
+        if (!wt) {
+          out.push({ title, error: 'pas de contenu' })
+          continue
+        }
+        try {
+          out.push({ title, result: parseWikitext(wt, knownBiomes) })
+        } catch (e) {
+          out.push({ title, error: e instanceof Error ? e.message : 'parse' })
+        }
+      }
+    } catch (e) {
+      for (const t of chunk) out.push({ title: t, error: e instanceof Error ? e.message : 'erreur' })
+    }
+    done += chunk.length
+    onProgress?.(done)
+    if (i + BATCH_SIZE < titles.length) await sleep(BATCH_DELAY_MS)
+  }
+  return out
 }
 
 export { fetchWikiAnimal, wikiTitleFromUrl }

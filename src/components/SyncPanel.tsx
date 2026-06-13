@@ -2,12 +2,10 @@ import { useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { upsertVariants } from '../lib/catalog'
 import {
-  fetchWikiAnimal,
+  fetchWikiBatch,
   listAnimalPages,
   diffAnimal,
-  urlForEntry,
   urlForTitle,
-  sleep,
   SYNC_NUM,
   SYNC_STR,
   type FieldDiff,
@@ -30,8 +28,6 @@ interface NewItem {
   variants: WikiVariant[]
   selected: boolean
 }
-
-const THROTTLE_MS = 1100
 
 export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onApplied: () => Promise<void> }) {
   const [phase, setPhase] = useState<Phase>('idle')
@@ -75,49 +71,45 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
       }
     }
 
-    const total = (doExisting ? entries.length : 0) + candidates.length
+    const existingTitles = doExisting ? entries.map((e) => e.wiki_title ?? e.name_en) : []
+    const existingSet = new Set(existingTitles.map((t) => t.toLowerCase()))
+    const titles = [...existingTitles, ...candidates]
+    const total = titles.length
+
+    setProgress({ done: 0, total, label: 'Téléchargement par lots de 50…' })
+    const items = await fetchWikiBatch(titles, knownBiomes, (d) =>
+      setProgress({ done: d, total, label: '' }),
+    )
+
     const upd: UpdateItem[] = []
     const nw: NewItem[] = []
     const errs: { name: string; reason: string }[] = []
-    let done = 0
 
-    // allowUpdate: record field changes when the page matches an existing animal.
-    const handle = async (label: string, url: string, existing: AnimalEntry | undefined, allowUpdate: boolean) => {
-      setProgress({ done, total, label })
-      try {
-        const { animal: w, variants } = await fetchWikiAnimal(url, knownBiomes)
-        const match = existing ?? (w.name_en ? byName.get(String(w.name_en).toLowerCase()) : undefined)
-        if (match) {
-          if (allowUpdate) {
-            const diff = diffAnimal(match, w)
-            if (Object.keys(diff).length || variants.length) {
-              upd.push({ id: match.id, name: match.name_en, diff, variants })
-            }
-          }
-          // insert-only: a candidate that already exists is simply skipped.
-        } else {
-          const nm = String(w.name_en ?? '').trim()
-          // Skip junk pages (placeholders / templates without a real name).
-          if (nm && nm !== '??') {
-            nw.push({ title: label, name: nm, wiki: w, variants, selected: true })
+    for (const it of items) {
+      if (it.error || !it.result) {
+        // Errors only matter for existing animals; meta/candidate pages are skipped.
+        if (existingSet.has(it.title.toLowerCase())) errs.push({ name: it.title, reason: it.error ?? 'vide' })
+        continue
+      }
+      const { animal: w, variants } = it.result
+      const match = w.name_en ? byName.get(String(w.name_en).toLowerCase()) : undefined
+      if (match) {
+        if (mode !== 'insert') {
+          const diff = diffAnimal(match, w)
+          if (Object.keys(diff).length || variants.length) {
+            upd.push({ id: match.id, name: match.name_en, diff, variants })
           }
         }
-      } catch (e) {
-        // For existing animals a missing infobox is a real error; for category
-        // candidates it just means the page isn't an animal, so skip silently.
-        if (existing) errs.push({ name: label, reason: e instanceof Error ? e.message : 'erreur' })
+      } else if (mode !== 'update') {
+        const nm = String(w.name_en ?? '').trim()
+        if (nm && nm !== '??') nw.push({ title: it.title, name: nm, wiki: w, variants, selected: true })
       }
-      done++
-      await sleep(THROTTLE_MS)
     }
-
-    if (doExisting) for (const e of entries) await handle(e.name_en, urlForEntry(e), e, true)
-    for (const t of candidates) await handle(t, urlForTitle(t), undefined, mode === 'both')
 
     setUpdates(upd)
     setNews(nw)
     setErrors((x) => [...x, ...errs])
-    setProgress({ done, total, label: '' })
+    setProgress({ done: total, total, label: '' })
     setPhase('review')
   }
 
