@@ -43,12 +43,14 @@ create policy animals_read
 -- i.e. the admin. Open this up later if in-app editing is needed.
 
 -- ---------- Per-user personal state ----------
+-- owned_count: 0 = none, 1 = exactly one, 2 = two or more ("2+", i.e. can breed).
+-- max_level: highest level reached for this animal (for collections).
 create table if not exists public.user_animals (
-  user_id           uuid    not null default auth.uid() references auth.users(id) on delete cascade,
-  animal_id         bigint  not null references public.animals(id) on delete cascade,
-  owned             boolean not null default false,
-  breeding_unlocked boolean not null default false,
-  updated_at        timestamptz not null default now(),
+  user_id      uuid    not null default auth.uid() references auth.users(id) on delete cascade,
+  animal_id    bigint  not null references public.animals(id) on delete cascade,
+  owned_count  smallint not null default 0 check (owned_count between 0 and 2),
+  max_level    int,
+  updated_at   timestamptz not null default now(),
   primary key (user_id, animal_id)
 );
 
@@ -73,3 +75,68 @@ drop policy if exists user_animals_delete_own on public.user_animals;
 create policy user_animals_delete_own
   on public.user_animals for delete
   to authenticated using (user_id = auth.uid());
+
+-- ---------- Per-user shelters (one per biome) ----------
+create table if not exists public.user_shelters (
+  user_id    uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  biome      text not null,
+  level      int  not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, biome)
+);
+
+alter table public.user_shelters enable row level security;
+
+drop policy if exists user_shelters_select_own on public.user_shelters;
+create policy user_shelters_select_own
+  on public.user_shelters for select
+  to authenticated using (user_id = auth.uid());
+
+drop policy if exists user_shelters_insert_own on public.user_shelters;
+create policy user_shelters_insert_own
+  on public.user_shelters for insert
+  to authenticated with check (user_id = auth.uid());
+
+drop policy if exists user_shelters_update_own on public.user_shelters;
+create policy user_shelters_update_own
+  on public.user_shelters for update
+  to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+drop policy if exists user_shelters_delete_own on public.user_shelters;
+create policy user_shelters_delete_own
+  on public.user_shelters for delete
+  to authenticated using (user_id = auth.uid());
+
+-- ---------- Admin role + catalog write access ----------
+create table if not exists public.app_admins (
+  user_id uuid primary key references auth.users(id) on delete cascade
+);
+alter table public.app_admins enable row level security;
+
+drop policy if exists app_admins_read_self on public.app_admins;
+create policy app_admins_read_self
+  on public.app_admins for select
+  to authenticated using (user_id = auth.uid());
+
+create or replace function public.is_admin()
+  returns boolean
+  language sql security definer stable set search_path = public
+as $$
+  select exists (select 1 from public.app_admins where user_id = auth.uid());
+$$;
+grant execute on function public.is_admin() to authenticated;
+
+-- Add your admin user id here:
+-- insert into public.app_admins (user_id) values ('<your-user-id>') on conflict do nothing;
+
+drop policy if exists animals_admin_insert on public.animals;
+create policy animals_admin_insert
+  on public.animals for insert to authenticated with check (public.is_admin());
+
+drop policy if exists animals_admin_update on public.animals;
+create policy animals_admin_update
+  on public.animals for update to authenticated using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists animals_admin_delete on public.animals;
+create policy animals_admin_delete
+  on public.animals for delete to authenticated using (public.is_admin());

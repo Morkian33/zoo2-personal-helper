@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase } from './lib/supabase'
 import { ensureAnonymousSession } from './lib/auth'
 import { AccountBar } from './components/AccountBar'
-import { CatalogTable } from './components/CatalogTable'
+import { CatalogView } from './components/CatalogView'
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null)
@@ -30,7 +30,7 @@ export default function App() {
 
       <main>
         {ready ? (
-          <CatalogTable userId={session?.user?.id ?? null} />
+          <CatalogView userId={session?.user?.id ?? null} />
         ) : (
           <p className="muted">Initialisation…</p>
         )}

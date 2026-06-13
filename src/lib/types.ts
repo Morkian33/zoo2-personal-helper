@@ -47,14 +47,20 @@ export interface AnimalMetrics {
 }
 
 // Per-user state for an animal (table public.user_animals).
+// owned_count: 0 = none, 1 = exactly one, 2 = two or more ("2+", can breed).
 export interface UserAnimalState {
-  owned: boolean
-  breeding_unlocked: boolean
+  owned_count: number
+  max_level: number | null
 }
+
+// Per-user shelter level for each biome (table public.user_shelters).
+// Map keyed by biome; an absent key means the shelter is not owned. When present,
+// the value is the shelter level (0-3); level 0 is owned-but-base, distinct from absent.
+export type ShelterLevels = Map<string, number>
 
 // Merged view consumed by the table.
 export interface AnimalEntry extends AnimalRow {
   metrics: AnimalMetrics
-  owned: boolean
-  breeding_unlocked: boolean
+  owned_count: number
+  max_level: number | null
 }
