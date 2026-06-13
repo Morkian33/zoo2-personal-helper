@@ -135,6 +135,67 @@ button:disabled {
   color: var(--error);
 }
 
+/* ---------- Collections ---------- */
+.coll-list {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.8rem;
+}
+.coll {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+}
+.coll.complete {
+  border-color: #1d3322;
+  background: var(--owned);
+}
+.coll.levelable {
+  border-color: var(--accent);
+}
+.coll summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.badge {
+  font-size: 0.72rem;
+  background: var(--accent);
+  color: #0b1020;
+  border-radius: 6px;
+  padding: 0.05rem 0.4rem;
+  font-weight: 600;
+}
+.coll-star {
+  color: var(--accent);
+  font-size: 0.8rem;
+}
+.coll-prog {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.coll-reqs {
+  margin: 0.5rem 0 0.2rem;
+  display: grid;
+  gap: 0.2rem;
+}
+.coll-req {
+  display: grid;
+  grid-template-columns: 1.2rem 1fr auto;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  align-items: baseline;
+}
+.coll-req.ok {
+  color: var(--text);
+}
+.coll-req:not(.ok) {
+  color: var(--muted);
+}
+
 /* ---------- Captcha ---------- */
 .turnstile-host {
   position: fixed;

@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase'
 import { loadCatalog, setUserAnimal, setUserShelter, setUserVariant } from '../lib/catalog'
 import { shelterBiome } from '../lib/biome'
 import type { AnimalEntry, ShelterLevels, VariantEntry, BiomeLabels } from '../lib/types'
+import type { CollectionRow, CollectionRequirementRow } from '../lib/collections'
+import { CollectionsView } from './CollectionsView'
 import { SheltersPanel } from './SheltersPanel'
 import { AnalysisTable } from './AnalysisTable'
 import { InventoryTable } from './InventoryTable'
@@ -10,7 +12,7 @@ import { AdminPanel } from './AdminPanel'
 import { SyncPanel } from './SyncPanel'
 import { CollectionsSyncPanel } from './CollectionsSyncPanel'
 
-type Tab = 'analysis' | 'zoo' | 'admin'
+type Tab = 'analysis' | 'zoo' | 'collections' | 'admin'
 
 // Container: owns catalog data + personal state, and switches between the
 // "Analyse" (decision table), "Mon zoo" (data entry) and "Admin" (catalog editing) tabs.
@@ -18,16 +20,20 @@ export function CatalogView({ userId }: { userId: string | null }) {
   const [entries, setEntries] = useState<AnimalEntry[]>([])
   const [shelters, setShelters] = useState<ShelterLevels>(new Map())
   const [biomeLabels, setBiomeLabels] = useState<BiomeLabels>(new Map())
+  const [collections, setCollections] = useState<CollectionRow[]>([])
+  const [requirements, setRequirements] = useState<CollectionRequirementRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [tab, setTab] = useState<Tab>('analysis')
 
   const reload = useCallback(async () => {
-    const { entries, shelters, biomeLabels } = await loadCatalog()
+    const { entries, shelters, biomeLabels, collections, requirements } = await loadCatalog()
     setEntries(entries)
     setShelters(shelters)
     setBiomeLabels(biomeLabels)
+    setCollections(collections)
+    setRequirements(requirements)
   }, [])
 
   // Reload whenever the signed-in user changes (login / logout / secure), so the
@@ -115,6 +121,12 @@ export function CatalogView({ userId }: { userId: string | null }) {
         <button className={`tab ${tab === 'zoo' ? 'active' : ''}`} onClick={() => setTab('zoo')}>
           Mon zoo
         </button>
+        <button
+          className={`tab ${tab === 'collections' ? 'active' : ''}`}
+          onClick={() => setTab('collections')}
+        >
+          Collections
+        </button>
         {isAdmin && (
           <button className={`tab ${tab === 'admin' ? 'active' : ''}`} onClick={() => setTab('admin')}>
             Admin
@@ -155,6 +167,10 @@ export function CatalogView({ userId }: { userId: string | null }) {
             onCommitVariantLevel={(v) => persistVariant(v, { max_level: v.max_level })}
           />
         </div>
+      )}
+
+      {tab === 'collections' && (
+        <CollectionsView entries={entries} collections={collections} requirements={requirements} />
       )}
 
       {tab === 'admin' && isAdmin && (

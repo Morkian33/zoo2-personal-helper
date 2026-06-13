@@ -11,23 +11,29 @@ import type {
   UserVariantState,
   BiomeLabels,
 } from './types'
+import type { CollectionRow, CollectionRequirementRow } from './collections'
 
 export interface CatalogData {
   entries: AnimalEntry[]
   shelters: ShelterLevels
   biomeLabels: BiomeLabels
+  collections: CollectionRow[]
+  requirements: CollectionRequirementRow[]
 }
 
 // Loads the catalog (animals + variants) and the current user's personal state, merged.
 export async function loadCatalog(): Promise<CatalogData> {
-  const [animalsRes, userRes, shelterRes, variantsRes, userVarRes, biomeRes] = await Promise.all([
-    supabase.from('animals').select('*').order('name_en', { ascending: true }),
-    supabase.from('user_animals').select('animal_id, owned_count, max_level'),
-    supabase.from('user_shelters').select('biome, level'),
-    supabase.from('animal_variants').select('*').order('coat_name', { ascending: true }),
-    supabase.from('user_variants').select('variant_id, owned, max_level'),
-    supabase.from('biome_labels').select('name_en, name_fr'),
-  ])
+  const [animalsRes, userRes, shelterRes, variantsRes, userVarRes, biomeRes, colRes, colReqRes] =
+    await Promise.all([
+      supabase.from('animals').select('*').order('name_en', { ascending: true }),
+      supabase.from('user_animals').select('animal_id, owned_count, max_level'),
+      supabase.from('user_shelters').select('biome, level'),
+      supabase.from('animal_variants').select('*').order('coat_name', { ascending: true }),
+      supabase.from('user_variants').select('variant_id, owned, max_level'),
+      supabase.from('biome_labels').select('name_en, name_fr'),
+      supabase.from('collections').select('*').order('sort', { ascending: true }),
+      supabase.from('collection_requirements').select('collection_id, animal_id, variant_id, required_level'),
+    ])
 
   if (animalsRes.error) throw animalsRes.error
 
@@ -77,7 +83,13 @@ export async function loadCatalog(): Promise<CatalogData> {
     }
   })
 
-  return { entries, shelters, biomeLabels }
+  return {
+    entries,
+    shelters,
+    biomeLabels,
+    collections: (colRes.data as CollectionRow[] | null) ?? [],
+    requirements: (colReqRes.data as CollectionRequirementRow[] | null) ?? [],
+  }
 }
 
 // True when the animal can be bred: at least 2 owned (any coats of the species) AND an
