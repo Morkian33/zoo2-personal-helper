@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
+import { fetchWikiAnimal } from '../lib/wiki'
 import type { AnimalEntry } from '../lib/types'
 
 type FieldType = 'text' | 'number' | 'date' | 'bool'
@@ -46,16 +47,18 @@ function emptyForm(): FormState {
   return f
 }
 
+// Converts a DB-shaped value into the form representation for a given field.
+function toFormValue(fl: Field, v: unknown): string | boolean {
+  if (fl.type === 'bool') return Boolean(v)
+  if (v == null) return ''
+  if (fl.percent) return String(+(Number(v) * 100).toFixed(4))
+  return String(v)
+}
+
 function entryToForm(e: AnimalEntry): FormState {
   const f: FormState = {}
   const raw = e as unknown as Record<string, unknown>
-  for (const fl of FIELDS) {
-    const v = raw[fl.key]
-    if (fl.type === 'bool') f[fl.key] = Boolean(v)
-    else if (v == null) f[fl.key] = ''
-    else if (fl.percent) f[fl.key] = String(+(Number(v) * 100).toFixed(4))
-    else f[fl.key] = String(v)
-  }
+  for (const fl of FIELDS) f[fl.key] = toFormValue(fl, raw[fl.key])
   return f
 }
 
@@ -71,6 +74,37 @@ export function AdminPanel({
   const [form, setForm] = useState<FormState>(emptyForm())
   const [status, setStatus] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [wikiBusy, setWikiBusy] = useState(false)
+
+  const knownBiomes = useMemo(
+    () => [...new Set(entries.map((e) => e.biome).filter(Boolean))] as string[],
+    [entries],
+  )
+
+  async function fromWiki() {
+    const url = String(form.url ?? '').trim()
+    if (!url) {
+      setStatus("Renseigne d'abord l'URL wiki")
+      return
+    }
+    setWikiBusy(true)
+    setStatus(null)
+    try {
+      const data = await fetchWikiAnimal(url, knownBiomes)
+      setForm((f) => {
+        const next = { ...f }
+        for (const fl of FIELDS) {
+          if (fl.key in data) next[fl.key] = toFormValue(fl, (data as Record<string, unknown>)[fl.key])
+        }
+        return next
+      })
+      setStatus('Pré-rempli depuis le wiki ✔ — vérifie puis enregistre')
+    } catch (err) {
+      setStatus('Wiki : ' + (err instanceof Error ? err.message : 'erreur'))
+    } finally {
+      setWikiBusy(false)
+    }
+  }
 
   const matches = search.trim()
     ? entries
@@ -154,6 +188,15 @@ export function AdminPanel({
 
       <form onSubmit={save}>
         <p className="muted">{editingId ? `Édition : ${form.name_en as string}` : 'Nouvel animal'}</p>
+        <div className="wiki-bar">
+          <button type="button" className="small" onClick={fromWiki} disabled={wikiBusy}>
+            {wikiBusy ? '…' : '⟳ Pré-remplir depuis le wiki'}
+          </button>
+          <span className="muted">
+            Remplis l'URL wiki puis clique. Tout est récupéré sauf le nom FR. Vérifie avant
+            d'enregistrer.
+          </span>
+        </div>
         <div className="admin-form">
           {FIELDS.map((fl) =>
             fl.type === 'bool' ? (
