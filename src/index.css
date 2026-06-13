@@ -184,6 +184,13 @@ button:disabled {
   gap: 0.5rem;
   color: var(--text);
 }
+.admin-form .changed input {
+  border-color: var(--accent);
+}
+.diff {
+  font-size: 0.78rem;
+  color: var(--accent);
+}
 .admin-actions {
   display: flex;
   align-items: center;

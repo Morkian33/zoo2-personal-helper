@@ -75,6 +75,8 @@ export function AdminPanel({
   const [status, setStatus] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [wikiBusy, setWikiBusy] = useState(false)
+  // Per-field old→new changes from the last wiki pre-fill.
+  const [diffs, setDiffs] = useState<Record<string, { from: string; to: string }>>({})
 
   const knownBiomes = useMemo(
     () => [...new Set(entries.map((e) => e.biome).filter(Boolean))] as string[],
@@ -91,14 +93,32 @@ export function AdminPanel({
     setStatus(null)
     try {
       const data = await fetchWikiAnimal(url, knownBiomes)
-      setForm((f) => {
-        const next = { ...f }
-        for (const fl of FIELDS) {
-          if (fl.key in data) next[fl.key] = toFormValue(fl, (data as Record<string, unknown>)[fl.key])
+      // Rebase on the matching animal's current DB state (avoids mixing with a
+      // previously edited animal), then apply the wiki values on top.
+      const nameEn = data.name_en ? String(data.name_en).toLowerCase() : null
+      const match = nameEn ? entries.find((e) => e.name_en.toLowerCase() === nameEn) : undefined
+      const base: FormState = match ? entryToForm(match) : emptyForm()
+      base.url = url
+
+      const changed: Record<string, { from: string; to: string }> = {}
+      const next: FormState = { ...base }
+      for (const fl of FIELDS) {
+        if (!(fl.key in data)) continue
+        const nv = toFormValue(fl, (data as Record<string, unknown>)[fl.key])
+        if (String(base[fl.key] ?? '') !== String(nv)) {
+          changed[fl.key] = { from: String(base[fl.key] ?? ''), to: String(nv) }
         }
-        return next
-      })
-      setStatus('Pré-rempli depuis le wiki ✔ — vérifie puis enregistre')
+        next[fl.key] = nv
+      }
+
+      setEditingId(match ? match.id : null)
+      setForm(next)
+      setDiffs(changed)
+      setStatus(
+        match
+          ? `Animal : ${match.name_en} — ${Object.keys(changed).length} champ(s) modifié(s). Vérifie le diff puis enregistre.`
+          : 'Animal absent du catalogue → création. Vérifie puis enregistre.',
+      )
     } catch (err) {
       setStatus('Wiki : ' + (err instanceof Error ? err.message : 'erreur'))
     } finally {
@@ -118,6 +138,7 @@ export function AdminPanel({
     setEditingId(e.id)
     setForm(entryToForm(e))
     setStatus(null)
+    setDiffs({})
     setSearch('')
   }
 
@@ -125,6 +146,7 @@ export function AdminPanel({
     setEditingId(null)
     setForm(emptyForm())
     setStatus(null)
+    setDiffs({})
   }
 
   async function save(ev: FormEvent) {
@@ -153,6 +175,7 @@ export function AdminPanel({
         : await supabase.from('animals').insert(payload)
       if (res.error) throw res.error
       setStatus('Enregistré ✔')
+      setDiffs({})
       onSaved()
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Erreur')
@@ -198,18 +221,24 @@ export function AdminPanel({
           </span>
         </div>
         <div className="admin-form">
-          {FIELDS.map((fl) =>
-            fl.type === 'bool' ? (
-              <label key={fl.key} className="admin-check">
+          {FIELDS.map((fl) => {
+            const diff = diffs[fl.key]
+            return fl.type === 'bool' ? (
+              <label key={fl.key} className={`admin-check${diff ? ' changed' : ''}`}>
                 <input
                   type="checkbox"
                   checked={Boolean(form[fl.key])}
                   onChange={(e) => setForm((f) => ({ ...f, [fl.key]: e.target.checked }))}
                 />
                 {fl.label}
+                {diff && (
+                  <span className="diff">
+                    {diff.from || '∅'} → {diff.to || '∅'}
+                  </span>
+                )}
               </label>
             ) : (
-              <label key={fl.key}>
+              <label key={fl.key} className={diff ? 'changed' : undefined}>
                 {fl.label}
                 <input
                   type={fl.type === 'number' ? 'number' : fl.type === 'date' ? 'date' : 'text'}
@@ -217,9 +246,14 @@ export function AdminPanel({
                   value={form[fl.key] as string}
                   onChange={(e) => setForm((f) => ({ ...f, [fl.key]: e.target.value }))}
                 />
+                {diff && (
+                  <span className="diff">
+                    {diff.from || '∅'} → {diff.to || '∅'}
+                  </span>
+                )}
               </label>
-            ),
-          )}
+            )
+          })}
         </div>
         <div className="admin-actions">
           <button type="submit" disabled={busy}>

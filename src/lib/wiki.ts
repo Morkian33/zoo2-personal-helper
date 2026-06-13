@@ -67,10 +67,27 @@ function num(s: string | undefined | null): number | null {
   return m ? Number(m[0].replace(/,/g, '')) : null
 }
 
+// Reformats a duration to a canonical "Xh Ym", tolerating wiki typos ("8h5m", "8h 5").
+function normalizeDuration(s: string | undefined): string | null {
+  if (!s) return null
+  const hm = /(\d+)\s*h/.exec(s)
+  const mm = /(\d+)\s*m/.exec(s)
+  if (!hm && !mm) return s.trim() || null
+  const h = hm ? Number(hm[1]) : 0
+  let m = mm ? Number(mm[1]) : 0
+  if (hm && !mm) {
+    const t = /(\d+)/.exec(s.slice(hm.index + hm[0].length))
+    if (t) m = Number(t[1])
+  }
+  if (h && m) return `${h}h ${m}m`
+  if (h) return `${h}h`
+  return `${m}m`
+}
+
 function valueTime(s: string | undefined): { value: number | null; time: string | null } {
   if (!s) return { value: null, time: null }
   const m = s.match(/\s*([\d.,]+)\s*\(([^)]+)\)/)
-  if (m) return { value: num(m[1]), time: m[2].trim() }
+  if (m) return { value: num(m[1]), time: normalizeDuration(m[2]) }
   return { value: num(s), time: null }
 }
 
@@ -179,7 +196,7 @@ export async function fetchWikiAnimal(url: string, knownBiomes: string[] = []): 
   set('shelter_lvl', num(ib.shelter_level))
   set('breed_proba', prob != null ? prob / 100 : null)
   set('breed_cost', num(ib.cost))
-  set('breed_duration', ib.duration)
+  set('breed_duration', normalizeDuration(ib.duration))
   set('price_value', num(ib.price))
   set('price_unit', price_unit)
   set('size', num(ib.size))
