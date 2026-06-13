@@ -2,11 +2,12 @@ import { useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import type { AnimalEntry } from '../lib/types'
 
-type FieldType = 'text' | 'number' | 'bool'
+type FieldType = 'text' | 'number' | 'date' | 'bool'
 interface Field {
   key: string
   label: string
   type: FieldType
+  percent?: boolean // stored as a fraction, edited as a percentage
 }
 
 // Raw catalog fields (computed metrics are never stored, so not editable here).
@@ -19,7 +20,7 @@ const FIELDS: Field[] = [
   { key: 'price_value', label: 'Prix', type: 'number' },
   { key: 'price_unit', label: 'Devise (Coins/Diamonds)', type: 'text' },
   { key: 'size', label: 'Taille', type: 'number' },
-  { key: 'breed_proba', label: 'Proba élevage (fraction, ex. 0.04)', type: 'number' },
+  { key: 'breed_proba', label: 'Proba élevage (%)', type: 'number', percent: true },
   { key: 'breed_cost', label: 'Coût élevage', type: 'number' },
   { key: 'breed_duration', label: 'Durée élevage (ex. 12h)', type: 'text' },
   { key: 'xp_feeding_value', label: 'XP nourrissage', type: 'number' },
@@ -31,6 +32,8 @@ const FIELDS: Field[] = [
   { key: 'max_animal_per_enclosure', label: 'Max / enclos', type: 'number' },
   { key: 'popularity', label: 'Popularité', type: 'number' },
   { key: 'base_selling_price', label: 'Prix de vente', type: 'number' },
+  { key: 'feed_x2_cost', label: 'Coût feed x2 (pièces)', type: 'number' },
+  { key: 'release_date', label: 'Date de sortie', type: 'date' },
   { key: 'wiki_title', label: 'Titre wiki', type: 'text' },
   { key: 'url', label: 'URL wiki', type: 'text' },
 ]
@@ -45,9 +48,13 @@ function emptyForm(): FormState {
 
 function entryToForm(e: AnimalEntry): FormState {
   const f: FormState = {}
+  const raw = e as unknown as Record<string, unknown>
   for (const fl of FIELDS) {
-    const v = (e as unknown as Record<string, unknown>)[fl.key]
-    f[fl.key] = fl.type === 'bool' ? Boolean(v) : v == null ? '' : String(v)
+    const v = raw[fl.key]
+    if (fl.type === 'bool') f[fl.key] = Boolean(v)
+    else if (v == null) f[fl.key] = ''
+    else if (fl.percent) f[fl.key] = String(+(Number(v) * 100).toFixed(4))
+    else f[fl.key] = String(v)
   }
   return f
 }
@@ -95,8 +102,10 @@ export function AdminPanel({
     for (const fl of FIELDS) {
       const raw = form[fl.key]
       if (fl.type === 'bool') payload[fl.key] = Boolean(raw)
-      else if (fl.type === 'number') payload[fl.key] = raw === '' ? null : Number(raw)
-      else payload[fl.key] = raw === '' ? null : raw
+      else if (raw === '') payload[fl.key] = null
+      else if (fl.percent) payload[fl.key] = Number(raw) / 100
+      else if (fl.type === 'number') payload[fl.key] = Number(raw)
+      else payload[fl.key] = raw
     }
     if (!payload.name_en) {
       setStatus('Le nom EN est requis')
@@ -144,9 +153,7 @@ export function AdminPanel({
       </div>
 
       <form onSubmit={save}>
-        <p className="muted">
-          {editingId ? `Édition : ${form.name_en as string}` : 'Nouvel animal'}
-        </p>
+        <p className="muted">{editingId ? `Édition : ${form.name_en as string}` : 'Nouvel animal'}</p>
         <div className="admin-form">
           {FIELDS.map((fl) =>
             fl.type === 'bool' ? (
@@ -162,7 +169,7 @@ export function AdminPanel({
               <label key={fl.key}>
                 {fl.label}
                 <input
-                  type={fl.type === 'number' ? 'number' : 'text'}
+                  type={fl.type === 'number' ? 'number' : fl.type === 'date' ? 'date' : 'text'}
                   step="any"
                   value={form[fl.key] as string}
                   onChange={(e) => setForm((f) => ({ ...f, [fl.key]: e.target.value }))}

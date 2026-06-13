@@ -21,6 +21,8 @@ export interface AnimalRow {
   max_animal_per_enclosure: number | null
   popularity: number | null
   base_selling_price: number | null
+  release_date: string | null
+  feed_x2_cost: number | null
   wiki_title: string | null
   url: string | null
 }

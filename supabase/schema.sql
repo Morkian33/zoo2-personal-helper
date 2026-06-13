@@ -27,6 +27,8 @@ create table if not exists public.animals (
   max_animal_per_enclosure int,
   popularity               numeric,
   base_selling_price       numeric,
+  release_date             date,
+  feed_x2_cost             numeric,   -- coins cost for the "feed x2" boost
   wiki_title               text,
   url                      text
 );
