@@ -103,7 +103,11 @@ function parseAllTemplates(wt: string, name: string): Record<string, string>[] {
 function num(s: string | undefined | null): number | null {
   if (!s) return null
   const m = s.replace(/\s/g, '').match(/[\d.,]+/)
-  return m ? Number(m[0].replace(/,/g, '')) : null
+  if (!m) return null
+  // These game fields are integers; the wiki uses BOTH "," and "." as thousands
+  // separators (e.g. "1,080" and "4.400"), so strip both.
+  const digits = m[0].replace(/[.,]/g, '')
+  return digits ? Number(digits) : null
 }
 
 // Reformats a duration to a canonical "Xh Ym", tolerating wiki typos ("8h5m", "8h 5").
@@ -204,7 +208,12 @@ export async function fetchWikiAnimal(url: string, knownBiomes: string[] = []): 
 
 // Parses a page's wikitext into an animal + its variants (no network).
 export function parseWikitext(wt: string, knownBiomes: string[] = []): WikiResult {
-  const ib = parseTemplate(wt, 'Example')
+  // The wiki uses two infobox templates with identical fields: {{Animal}} and {{Example}}.
+  // Pick whichever actually carries the infobox params (title1).
+  const candidates = [parseTemplate(wt, 'Animal'), parseTemplate(wt, 'Example')].filter(
+    (c): c is Record<string, string> => c != null,
+  )
+  const ib = candidates.find((c) => 'title1' in c) ?? candidates[0]
   if (!ib) throw new Error('Infobox introuvable sur la page')
 
   const priceRaw = ib.price ?? ''
@@ -225,10 +234,10 @@ export function parseWikitext(wt: string, knownBiomes: string[] = []): WikiResul
   const popIdx = wt.search(/==\s*Popularity/i)
   if (popIdx >= 0) {
     const sec = wt.slice(popIdx)
-    const rm = sec.match(/\|-\s*\n\|\s*1\s*\n\|\s*([\d,]+)\s*\n\|\s*([\d,]+)/)
+    const rm = sec.match(/\|-\s*\n\|\s*1\s*\n\|\s*([\d.,]+)\s*\n\|\s*([\d.,]+)/)
     if (rm) {
-      popularity = Number(rm[1].replace(/,/g, ''))
-      base_selling_price = Number(rm[2].replace(/,/g, ''))
+      popularity = Number(rm[1].replace(/[.,]/g, ''))
+      base_selling_price = Number(rm[2].replace(/[.,]/g, ''))
     }
   }
 
@@ -237,7 +246,7 @@ export function parseWikitext(wt: string, knownBiomes: string[] = []): WikiResul
     if (v !== null && v !== undefined && v !== '') (out as Record<string, unknown>)[k] = v
   }
   set('name_en', ib.title1)
-  set('biome', normalizeBiome(ib.biome, knownBiomes))
+  set('biome', normalizeBiome(ib.biome ? cleanLinks(ib.biome) : undefined, knownBiomes))
   set('shelter_lvl', num(ib.shelter_level))
   set('breed_proba', prob != null ? prob / 100 : null)
   set('breed_cost', num(ib.cost))
