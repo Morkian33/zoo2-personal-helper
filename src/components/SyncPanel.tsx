@@ -133,8 +133,18 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
       if (match) {
         if (mode !== 'insert') {
           const diff = diffAnimal(match, w)
-          if (Object.keys(diff).length || variants.length) {
-            upd.push({ id: match.id, name: match.name_en, diff, variants })
+          // Only the variants whose source/date actually changed (or are new coats),
+          // so re-syncing doesn't re-list every variant-bearing animal forever.
+          const changedVariants = variants.filter((v) => {
+            const ex = match.variants.find((x) => x.coat_name === v.coat_name)
+            return (
+              !ex ||
+              (ex.obtained_from ?? '') !== (v.obtained_from ?? '') ||
+              (ex.release_date ?? '') !== (v.release_date ?? '')
+            )
+          })
+          if (Object.keys(diff).length || changedVariants.length) {
+            upd.push({ id: match.id, name: match.name_en, diff, variants: changedVariants })
           }
         }
       } else if (mode !== 'update') {
