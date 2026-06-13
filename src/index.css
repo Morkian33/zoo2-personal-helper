@@ -345,6 +345,23 @@ button:disabled {
   margin-bottom: -1px;
 }
 
+.subtabs {
+  display: flex;
+  gap: 0.4rem;
+}
+.subtab {
+  background: var(--panel);
+  color: var(--muted);
+  font-weight: 500;
+  border: 1px solid var(--line);
+  padding: 0.35rem 0.9rem;
+}
+.subtab.active {
+  background: var(--accent);
+  color: #0b1020;
+  border-color: transparent;
+}
+
 .myzoo {
   display: grid;
   gap: 1.5rem;

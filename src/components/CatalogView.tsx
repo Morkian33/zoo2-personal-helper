@@ -14,6 +14,7 @@ import { CollectionsSyncPanel } from './CollectionsSyncPanel'
 import { TranslationsPanel } from './TranslationsPanel'
 
 type Tab = 'analysis' | 'zoo' | 'collections' | 'admin'
+type AdminTab = 'sync' | 'animals' | 'labels'
 
 // Container: owns catalog data + personal state, and switches between the
 // "Analyse" (decision table), "Mon zoo" (data entry) and "Admin" (catalog editing) tabs.
@@ -27,6 +28,7 @@ export function CatalogView({ userId }: { userId: string | null }) {
   const [error, setError] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [tab, setTab] = useState<Tab>('analysis')
+  const [adminTab, setAdminTab] = useState<AdminTab>('sync')
 
   const reload = useCallback(async () => {
     const { entries, shelters, biomeLabels, collections, requirements } = await loadCatalog()
@@ -217,13 +219,36 @@ export function CatalogView({ userId }: { userId: string | null }) {
 
       {tab === 'admin' && isAdmin && (
         <div className="admin-tab">
-          <SyncPanel entries={entries} onApplied={reload} />
-          <hr />
-          <CollectionsSyncPanel entries={entries} onApplied={reload} />
-          <hr />
-          <TranslationsPanel entries={entries} biomeLabels={biomeLabels} />
-          <hr />
-          <AdminPanel entries={entries} onSaved={() => void reload()} />
+          <nav className="subtabs">
+            <button
+              className={`subtab ${adminTab === 'sync' ? 'active' : ''}`}
+              onClick={() => setAdminTab('sync')}
+            >
+              Synchronisation
+            </button>
+            <button
+              className={`subtab ${adminTab === 'animals' ? 'active' : ''}`}
+              onClick={() => setAdminTab('animals')}
+            >
+              Animaux
+            </button>
+            <button
+              className={`subtab ${adminTab === 'labels' ? 'active' : ''}`}
+              onClick={() => setAdminTab('labels')}
+            >
+              Libellés FR
+            </button>
+          </nav>
+
+          {adminTab === 'sync' && (
+            <>
+              <SyncPanel entries={entries} onApplied={reload} />
+              <hr />
+              <CollectionsSyncPanel entries={entries} onApplied={reload} />
+            </>
+          )}
+          {adminTab === 'animals' && <AdminPanel entries={entries} onSaved={() => void reload()} />}
+          {adminTab === 'labels' && <TranslationsPanel entries={entries} biomeLabels={biomeLabels} />}
         </div>
       )}
     </>

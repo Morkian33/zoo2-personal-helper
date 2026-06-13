@@ -96,6 +96,7 @@ export function TranslationsPanel({
         {shownAnimals.map((a) => (
           <label key={a.id}>
             {a.name_en}
+            {a.biome && <span className="muted"> · {biomeLabels.get(a.biome) ?? a.biome}</span>}
             <input
               value={animalDraft[a.id] ?? ''}
               onChange={(e) => setAnimalDraft((d) => ({ ...d, [a.id]: e.target.value }))}
