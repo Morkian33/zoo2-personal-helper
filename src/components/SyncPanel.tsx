@@ -32,7 +32,6 @@ interface NewItem {
 
 export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onApplied: () => Promise<void> }) {
   const [phase, setPhase] = useState<Phase>('idle')
-  const [mode, setMode] = useState<'insert' | 'update' | 'both'>('both')
   const [progress, setProgress] = useState({ done: 0, total: 0, label: '' })
   const [updates, setUpdates] = useState<UpdateItem[]>([])
   const [news, setNews] = useState<NewItem[]>([])
@@ -99,29 +98,24 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
       entryByTitle.set(e.name_en.toLowerCase(), e)
       if (e.wiki_title) entryByTitle.set(e.wiki_title.toLowerCase(), e)
     }
-    const doExisting = mode !== 'insert'
-    const doNew = mode !== 'update'
-
     let candidates: string[] = []
-    if (doNew) {
-      setProgress({ done: 0, total: 0, label: 'Liste des animaux du wiki…' })
-      try {
-        const titles = await listAnimalPages()
-        const known = new Set<string>()
-        for (const e of entries) {
-          known.add(e.name_en.toLowerCase())
-          if (e.wiki_title) known.add(e.wiki_title.toLowerCase())
-        }
-        candidates = titles
-          .filter((t) => !known.has(t.toLowerCase()))
-          // Drop non-animal meta pages from the category (templates, list pages…).
-          .filter((t) => !/template/i.test(t) && t !== 'Animals')
-      } catch (e) {
-        setErrors((x) => [...x, { name: 'Catégorie wiki', reason: e instanceof Error ? e.message : 'erreur' }])
+    setProgress({ done: 0, total: 0, label: 'Liste des animaux du wiki…' })
+    try {
+      const titles = await listAnimalPages()
+      const known = new Set<string>()
+      for (const e of entries) {
+        known.add(e.name_en.toLowerCase())
+        if (e.wiki_title) known.add(e.wiki_title.toLowerCase())
       }
+      candidates = titles
+        .filter((t) => !known.has(t.toLowerCase()))
+        // Drop non-animal meta pages from the category (templates, list pages…).
+        .filter((t) => !/template/i.test(t) && t !== 'Animals')
+    } catch (e) {
+      setErrors((x) => [...x, { name: 'Catégorie wiki', reason: e instanceof Error ? e.message : 'erreur' }])
     }
 
-    const existingTitles = doExisting ? entries.map((e) => e.wiki_title ?? e.name_en) : []
+    const existingTitles = entries.map((e) => e.wiki_title ?? e.name_en)
     const titles = [...existingTitles, ...candidates]
     const total = titles.length
 
@@ -147,23 +141,21 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
       }
       const { animal: w, variants } = it.result
       if (match) {
-        if (mode !== 'insert') {
-          const diff = diffAnimal(match, w)
-          // Only the variants whose source/date actually changed (or are new coats),
-          // so re-syncing doesn't re-list every variant-bearing animal forever.
-          const changedVariants = variants.filter((v) => {
-            const ex = match.variants.find((x) => x.coat_name === v.coat_name)
-            return (
-              !ex ||
-              (ex.obtained_from ?? '') !== (v.obtained_from ?? '') ||
-              (ex.release_date ?? '') !== (v.release_date ?? '')
-            )
-          })
-          if (Object.keys(diff).length || changedVariants.length) {
-            upd.push({ id: match.id, name: match.name_en, diff, variants: changedVariants })
-          }
+        const diff = diffAnimal(match, w)
+        // Only the variants whose source/date actually changed (or are new coats),
+        // so re-syncing doesn't re-list every variant-bearing animal forever.
+        const changedVariants = variants.filter((v) => {
+          const ex = match.variants.find((x) => x.coat_name === v.coat_name)
+          return (
+            !ex ||
+            (ex.obtained_from ?? '') !== (v.obtained_from ?? '') ||
+            (ex.release_date ?? '') !== (v.release_date ?? '')
+          )
+        })
+        if (Object.keys(diff).length || changedVariants.length) {
+          upd.push({ id: match.id, name: match.name_en, diff, variants: changedVariants })
         }
-      } else if (mode !== 'update') {
+      } else {
         const nm = String(w.name_en ?? '').trim()
         if (nm && nm !== '??') nw.push({ title: it.requested, name: nm, wiki: w, variants, action: 'create' })
       }
@@ -240,21 +232,9 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
 
       {phase === 'idle' && (
         <>
-          <label>
-            Mode
-            <select value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}>
-              <option value="both">Ajouter + mettre à jour</option>
-              <option value="insert">Ajouter les nouveaux seulement</option>
-              <option value="update">Mettre à jour les existants seulement</option>
-            </select>
-          </label>
           <p className="muted">
-            {mode === 'insert'
-              ? 'Énumère le wiki et ne télécharge que les pages absentes de ta base — idéal après une release.'
-              : mode === 'update'
-                ? `Retélécharge les ${entries.length} animaux existants pour les mettre à jour.`
-                : `Les deux : ${entries.length} existants + les nouveaux du wiki.`}{' '}
-            Récupération par lots de 50 pages (quelques secondes). Rien n'est écrit avant validation.
+            Met à jour les {entries.length} animaux existants depuis le wiki et détecte les nouveaux.
+            Récupération par lots de 50 pages (quelques secondes). Rien n'est écrit avant validation ;
             name_fr / coat_name_fr préservés.
           </p>
           <button onClick={analyze}>Analyser</button>
