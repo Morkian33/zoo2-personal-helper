@@ -18,7 +18,6 @@ const FIELDS: Field[] = [
   { key: 'name_fr', label: 'Nom FR', type: 'text' },
   { key: 'biome', label: 'Biome', type: 'text' },
   { key: 'shelter_lvl', label: 'Shelter lvl', type: 'number' },
-  { key: 'variant', label: 'Variant', type: 'bool' },
   { key: 'price_value', label: 'Prix', type: 'number' },
   { key: 'price_unit', label: 'Devise (Coins/Diamonds)', type: 'text' },
   { key: 'size', label: 'Taille', type: 'number' },
@@ -143,6 +142,9 @@ export function AdminPanel({
     }
   }
 
+  const editingVariants =
+    editingId != null ? (entries.find((e) => e.id === editingId)?.variants ?? []) : []
+
   const matches = search.trim()
     ? entries
         .filter((e) =>
@@ -250,6 +252,23 @@ export function AdminPanel({
             d'enregistrer.
           </span>
         </div>
+        {editingId != null && (
+          <div className="variant-list">
+            <span className="muted">
+              Coats ({editingVariants.length})
+              {scrapedVariants.length > 0 && ` · ${scrapedVariants.length} trouvés au wiki`} :
+            </span>
+            {editingVariants.length > 0 ? (
+              <span>
+                {editingVariants
+                  .map((v) => (v.coat_name_fr ? `${v.coat_name} (${v.coat_name_fr})` : v.coat_name))
+                  .join(', ')}
+              </span>
+            ) : (
+              <span className="muted">aucun</span>
+            )}
+          </div>
+        )}
         <div className="admin-form">
           {FIELDS.map((fl) => {
             const diff = diffs[fl.key]
