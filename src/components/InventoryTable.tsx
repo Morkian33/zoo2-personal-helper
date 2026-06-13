@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { canBreed } from '../lib/catalog'
-import type { AnimalEntry, ShelterLevels } from '../lib/types'
+import type { AnimalEntry, ShelterLevels, VariantEntry } from '../lib/types'
 
-// Data-entry table: set owned count + max level per animal.
+// Data-entry table: set owned count + max level per animal, and ownership of variant coats.
 export function InventoryTable({
   entries,
   shelters,
@@ -11,6 +11,9 @@ export function InventoryTable({
   onSetOwned,
   onSetMaxLevel,
   onCommitMaxLevel,
+  onSetVariantOwned,
+  onSetVariantLevel,
+  onCommitVariantLevel,
 }: {
   entries: AnimalEntry[]
   shelters: ShelterLevels
@@ -19,10 +22,14 @@ export function InventoryTable({
   onSetOwned: (e: AnimalEntry, count: number) => void
   onSetMaxLevel: (e: AnimalEntry, value: number | null) => void
   onCommitMaxLevel: (e: AnimalEntry) => void
+  onSetVariantOwned: (v: VariantEntry, owned: boolean) => void
+  onSetVariantLevel: (v: VariantEntry, value: number | null) => void
+  onCommitVariantLevel: (v: VariantEntry) => void
 }) {
   const [search, setSearch] = useState('')
   const [biome, setBiome] = useState('')
   const [ownedFilter, setOwnedFilter] = useState<'all' | 'owned' | 'not'>('all')
+  const [expanded, setExpanded] = useState<Set<number>>(new Set())
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -36,6 +43,15 @@ export function InventoryTable({
       })
       .sort((a, b) => (a.name_fr ?? a.name_en).localeCompare(b.name_fr ?? b.name_en, 'fr'))
   }, [entries, search, biome, ownedFilter])
+
+  function toggle(id: number) {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   return (
     <div className="catalog">
@@ -68,7 +84,7 @@ export function InventoryTable({
           <thead>
             <tr>
               <th>Animal</th>
-              <th>Biome</th>
+              <th>Biome / source</th>
               <th>Abri requis</th>
               <th>Possédé</th>
               <th>Niv. max</th>
@@ -76,38 +92,86 @@ export function InventoryTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((e) => (
-              <tr key={e.id} className={e.owned_count > 0 ? 'owned' : ''}>
-                <td>{e.name_fr ?? e.name_en}</td>
-                <td>{e.biome ?? '—'}</td>
-                <td className="num">{e.shelter_lvl ?? '—'}</td>
-                <td className="center">
-                  <select
-                    value={e.owned_count}
-                    disabled={disabled}
-                    onChange={(ev) => onSetOwned(e, Number(ev.target.value))}
-                  >
-                    <option value={0}>Aucun</option>
-                    <option value={1}>1</option>
-                    <option value={2}>2+</option>
-                  </select>
-                </td>
-                <td className="center">
-                  <input
-                    className="lvl"
-                    type="number"
-                    min={0}
-                    value={e.max_level ?? ''}
-                    disabled={disabled}
-                    onChange={(ev) =>
-                      onSetMaxLevel(e, ev.target.value === '' ? null : Number(ev.target.value))
-                    }
-                    onBlur={() => onCommitMaxLevel(e)}
-                  />
-                </td>
-                <td className="center">{canBreed(e, shelters) ? '✓' : '—'}</td>
-              </tr>
-            ))}
+            {rows.map((e) => {
+              const isOpen = expanded.has(e.id)
+              return (
+                <Fragment key={e.id}>
+                  <tr className={e.owned_count > 0 ? 'owned' : ''}>
+                    <td>
+                      {e.variants.length > 0 ? (
+                        <button className="link expand" onClick={() => toggle(e.id)}>
+                          {isOpen ? '▾' : '▸'} {e.name_fr ?? e.name_en}{' '}
+                          <span className="muted">({e.variants.length})</span>
+                        </button>
+                      ) : (
+                        (e.name_fr ?? e.name_en)
+                      )}
+                    </td>
+                    <td>{e.biome ?? '—'}</td>
+                    <td className="num">{e.shelter_lvl ?? '—'}</td>
+                    <td className="center">
+                      <select
+                        value={e.owned_count}
+                        disabled={disabled}
+                        onChange={(ev) => onSetOwned(e, Number(ev.target.value))}
+                      >
+                        <option value={0}>Aucun</option>
+                        <option value={1}>1</option>
+                        <option value={2}>2+</option>
+                      </select>
+                    </td>
+                    <td className="center">
+                      <input
+                        className="lvl"
+                        type="number"
+                        min={0}
+                        value={e.max_level ?? ''}
+                        disabled={disabled}
+                        onChange={(ev) =>
+                          onSetMaxLevel(e, ev.target.value === '' ? null : Number(ev.target.value))
+                        }
+                        onBlur={() => onCommitMaxLevel(e)}
+                      />
+                    </td>
+                    <td className="center">{canBreed(e, shelters) ? '✓' : '—'}</td>
+                  </tr>
+
+                  {isOpen &&
+                    e.variants.map((v) => (
+                      <tr key={`v${v.id}`} className="variant-row">
+                        <td className="variant-name">↳ {v.coat_name}</td>
+                        <td className="muted">
+                          {v.obtained_from ?? '—'}
+                          {v.release_date ? ` · ${v.release_date}` : ''}
+                        </td>
+                        <td />
+                        <td className="center">
+                          <input
+                            type="checkbox"
+                            checked={v.owned}
+                            disabled={disabled}
+                            onChange={(ev) => onSetVariantOwned(v, ev.target.checked)}
+                          />
+                        </td>
+                        <td className="center">
+                          <input
+                            className="lvl"
+                            type="number"
+                            min={0}
+                            value={v.max_level ?? ''}
+                            disabled={disabled}
+                            onChange={(ev) =>
+                              onSetVariantLevel(v, ev.target.value === '' ? null : Number(ev.target.value))
+                            }
+                            onBlur={() => onCommitVariantLevel(v)}
+                          />
+                        </td>
+                        <td />
+                      </tr>
+                    ))}
+                </Fragment>
+              )
+            })}
           </tbody>
         </table>
       </div>

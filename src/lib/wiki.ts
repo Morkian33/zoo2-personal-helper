@@ -6,6 +6,27 @@ const API = 'https://zoo2animalpark.fandom.com/api.php'
 
 export type WikiAnimal = Partial<AnimalRow>
 
+export interface WikiVariant {
+  coat_name: string
+  obtained_from: string | null
+  release_date: string | null
+}
+
+export interface WikiResult {
+  animal: WikiAnimal
+  variants: WikiVariant[]
+}
+
+// Strips [[wiki links]] (keeping display text) and collapses whitespace.
+function cleanLinks(s: string): string {
+  return s
+    .replace(/\[\[([^\]]*)\]\]/g, (_m, inner: string) =>
+      inner.includes('|') ? inner.split('|').pop() ?? '' : inner,
+    )
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export function wikiTitleFromUrl(url: string): string | null {
   try {
     const u = new URL(url.trim())
@@ -17,14 +38,8 @@ export function wikiTitleFromUrl(url: string): string | null {
   }
 }
 
-// Parses a {{Name|key=value|...}} template, handling | nested inside [[ ]] / {{ }}.
-function parseTemplate(wt: string, name: string): Record<string, string> | null {
-  const start = wt.indexOf('{{' + name)
-  if (start < 0) return null
-  const end = wt.indexOf('}}', start)
-  if (end < 0) return null
-  const body = wt.slice(start + 2 + name.length, end)
-
+// Splits a template body into key=value params, handling | nested inside [[ ]] / {{ }}.
+function parseParams(body: string): Record<string, string> {
   const parts: string[] = []
   let cur = ''
   let depth = 0
@@ -59,6 +74,30 @@ function parseTemplate(wt: string, name: string): Record<string, string> | null 
     out[p.slice(0, eq).trim().toLowerCase()] = p.slice(eq + 1).trim()
   }
   return out
+}
+
+// Parses the first {{Name|...}} template.
+function parseTemplate(wt: string, name: string): Record<string, string> | null {
+  const start = wt.indexOf('{{' + name)
+  if (start < 0) return null
+  const end = wt.indexOf('}}', start)
+  if (end < 0) return null
+  return parseParams(wt.slice(start + 2 + name.length, end))
+}
+
+// Parses every {{Name|...}} template on the page.
+function parseAllTemplates(wt: string, name: string): Record<string, string>[] {
+  const res: Record<string, string>[] = []
+  let idx = 0
+  for (;;) {
+    const start = wt.indexOf('{{' + name, idx)
+    if (start < 0) break
+    const end = wt.indexOf('}}', start)
+    if (end < 0) break
+    res.push(parseParams(wt.slice(start + 2 + name.length, end)))
+    idx = end + 2
+  }
+  return res
 }
 
 function num(s: string | undefined | null): number | null {
@@ -144,7 +183,7 @@ function normalizeBiome(raw: string | undefined, known: string[]): string | null
   return best != null && bd <= 2 ? best : t
 }
 
-export async function fetchWikiAnimal(url: string, knownBiomes: string[] = []): Promise<WikiAnimal> {
+export async function fetchWikiAnimal(url: string, knownBiomes: string[] = []): Promise<WikiResult> {
   const title = wikiTitleFromUrl(url)
   if (!title) throw new Error('URL wiki invalide')
 
@@ -214,5 +253,15 @@ export async function fetchWikiAnimal(url: string, knownBiomes: string[] = []): 
   set('base_selling_price', base_selling_price)
   set('feed_x2_cost', num(ib.x2_xp_feed))
   set('release_date', wikiDate(ib.release_date))
-  return out
+
+  // Variants are {{Coat_Box}} entries on the same page.
+  const variants: WikiVariant[] = parseAllTemplates(wt, 'Coat_Box')
+    .map((cb) => ({
+      coat_name: (cb.row1 ?? '').trim(),
+      obtained_from: cb.obtained_from ? cleanLinks(cb.obtained_from) || null : null,
+      release_date: wikiDate(cb.release_date),
+    }))
+    .filter((v) => v.coat_name)
+
+  return { animal: out, variants }
 }

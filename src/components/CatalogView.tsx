@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { loadCatalog, setUserAnimal, setUserShelter } from '../lib/catalog'
+import { loadCatalog, setUserAnimal, setUserShelter, setUserVariant } from '../lib/catalog'
 import { shelterBiome } from '../lib/biome'
-import type { AnimalEntry, ShelterLevels } from '../lib/types'
+import type { AnimalEntry, ShelterLevels, VariantEntry } from '../lib/types'
 import { SheltersPanel } from './SheltersPanel'
 import { AnalysisTable } from './AnalysisTable'
 import { InventoryTable } from './InventoryTable'
@@ -64,6 +64,23 @@ export function CatalogView({ userId }: { userId: string | null }) {
     )
   }
 
+  function patchVariant(v: VariantEntry, patch: Partial<VariantEntry>) {
+    setEntries((list) =>
+      list.map((a) =>
+        a.id === v.animal_id
+          ? { ...a, variants: a.variants.map((x) => (x.id === v.id ? { ...x, ...patch } : x)) }
+          : a,
+      ),
+    )
+  }
+
+  function persistVariant(v: VariantEntry, patch: { owned?: boolean; max_level?: number | null }) {
+    if (!userId) return
+    setUserVariant(userId, v.id, patch, { owned: v.owned, max_level: v.max_level }).catch((err) =>
+      console.error('Failed to save variant state', err),
+    )
+  }
+
   function setShelter(b: string, level: number | null) {
     setShelters((prev) => {
       const next = new Map(prev)
@@ -111,6 +128,12 @@ export function CatalogView({ userId }: { userId: string | null }) {
             }}
             onSetMaxLevel={(e, value) => patchEntry(e.id, { max_level: value })}
             onCommitMaxLevel={(e) => persistAnimal(e, { max_level: e.max_level })}
+            onSetVariantOwned={(v, owned) => {
+              persistVariant(v, { owned })
+              patchVariant(v, { owned })
+            }}
+            onSetVariantLevel={(v, value) => patchVariant(v, { max_level: value })}
+            onCommitVariantLevel={(v) => persistVariant(v, { max_level: v.max_level })}
           />
         </div>
       )}

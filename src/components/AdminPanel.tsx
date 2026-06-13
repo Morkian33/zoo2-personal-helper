@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
-import { fetchWikiAnimal } from '../lib/wiki'
+import { fetchWikiAnimal, type WikiVariant } from '../lib/wiki'
+import { upsertVariants } from '../lib/catalog'
 import type { AnimalEntry } from '../lib/types'
 
 type FieldType = 'text' | 'number' | 'date' | 'bool'
@@ -77,6 +78,8 @@ export function AdminPanel({
   const [wikiBusy, setWikiBusy] = useState(false)
   // Per-field old→new changes from the last wiki pre-fill.
   const [diffs, setDiffs] = useState<Record<string, { from: string; to: string }>>({})
+  // Variants found by the last wiki pre-fill, persisted on save.
+  const [scrapedVariants, setScrapedVariants] = useState<WikiVariant[]>([])
 
   const knownBiomes = useMemo(
     () => [...new Set(entries.map((e) => e.biome).filter(Boolean))] as string[],
@@ -92,7 +95,8 @@ export function AdminPanel({
     setWikiBusy(true)
     setStatus(null)
     try {
-      const data = await fetchWikiAnimal(url, knownBiomes)
+      const { animal: data, variants } = await fetchWikiAnimal(url, knownBiomes)
+      setScrapedVariants(variants)
       // Rebase on the matching animal's current DB state (avoids mixing with a
       // previously edited animal), then apply the wiki values on top.
       const nameEn = data.name_en ? String(data.name_en).toLowerCase() : null
@@ -114,10 +118,11 @@ export function AdminPanel({
       setEditingId(match ? match.id : null)
       setForm(next)
       setDiffs(changed)
+      const vSuffix = variants.length ? ` · ${variants.length} variant(s)` : ''
       setStatus(
         match
-          ? `Animal : ${match.name_en} — ${Object.keys(changed).length} champ(s) modifié(s). Vérifie le diff puis enregistre.`
-          : 'Animal absent du catalogue → création. Vérifie puis enregistre.',
+          ? `Animal : ${match.name_en} — ${Object.keys(changed).length} champ(s) modifié(s)${vSuffix}. Vérifie puis enregistre.`
+          : `Animal absent du catalogue → création${vSuffix}. Vérifie puis enregistre.`,
       )
     } catch (err) {
       setStatus('Wiki : ' + (err instanceof Error ? err.message : 'erreur'))
@@ -139,6 +144,7 @@ export function AdminPanel({
     setForm(entryToForm(e))
     setStatus(null)
     setDiffs({})
+    setScrapedVariants([])
     setSearch('')
   }
 
@@ -147,6 +153,7 @@ export function AdminPanel({
     setForm(emptyForm())
     setStatus(null)
     setDiffs({})
+    setScrapedVariants([])
   }
 
   async function save(ev: FormEvent) {
@@ -170,12 +177,23 @@ export function AdminPanel({
     }
 
     try {
-      const res = editingId
-        ? await supabase.from('animals').update(payload).eq('id', editingId)
-        : await supabase.from('animals').insert(payload)
-      if (res.error) throw res.error
-      setStatus('Enregistré ✔')
+      let animalId = editingId
+      if (editingId) {
+        const { error } = await supabase.from('animals').update(payload).eq('id', editingId)
+        if (error) throw error
+      } else {
+        const { data, error } = await supabase.from('animals').insert(payload).select('id').single()
+        if (error) throw error
+        animalId = data.id as number
+      }
+      if (animalId != null && scrapedVariants.length > 0) {
+        await upsertVariants(animalId, scrapedVariants)
+      }
+      setStatus(
+        `Enregistré ✔${scrapedVariants.length ? ` (+${scrapedVariants.length} variants)` : ''}`,
+      )
       setDiffs({})
+      setScrapedVariants([])
       onSaved()
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Erreur')

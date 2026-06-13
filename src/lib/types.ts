@@ -60,9 +60,30 @@ export interface UserAnimalState {
 // the value is the shelter level (0-3); level 0 is owned-but-base, distinct from absent.
 export type ShelterLevels = Map<string, number>
 
+// Variant coat (table public.animal_variants); stats inherited from the base animal.
+export interface VariantRow {
+  id: number
+  animal_id: number
+  coat_name: string
+  obtained_from: string | null
+  release_date: string | null
+}
+
+// Per-user variant ownership (table public.user_variants).
+export interface UserVariantState {
+  owned: boolean
+  max_level: number | null
+}
+
+export interface VariantEntry extends VariantRow {
+  owned: boolean
+  max_level: number | null
+}
+
 // Merged view consumed by the table.
 export interface AnimalEntry extends AnimalRow {
   metrics: AnimalMetrics
   owned_count: number
   max_level: number | null
+  variants: VariantEntry[]
 }

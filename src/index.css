@@ -341,6 +341,18 @@ tbody input.lvl {
   padding: 0.2rem 0.3rem;
   text-align: right;
 }
+
+button.expand {
+  text-decoration: none;
+}
+tbody tr.variant-row td {
+  background: #0d1016;
+  font-size: 0.82rem;
+}
+.variant-name {
+  padding-left: 1.4rem !important;
+  color: var(--muted);
+}
 tbody td select {
   padding: 0.2rem 0.3rem;
 }
