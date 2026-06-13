@@ -66,7 +66,10 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
           known.add(e.name_en.toLowerCase())
           if (e.wiki_title) known.add(e.wiki_title.toLowerCase())
         }
-        candidates = titles.filter((t) => !known.has(t.toLowerCase()))
+        candidates = titles
+          .filter((t) => !known.has(t.toLowerCase()))
+          // Drop non-animal meta pages from the category (templates, list pages…).
+          .filter((t) => !/template/i.test(t) && t !== 'Animals')
       } catch (e) {
         setErrors((x) => [...x, { name: 'Catégorie wiki', reason: e instanceof Error ? e.message : 'erreur' }])
       }
@@ -93,10 +96,16 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
           }
           // insert-only: a candidate that already exists is simply skipped.
         } else {
-          nw.push({ title: label, name: String(w.name_en ?? label), wiki: w, variants, selected: true })
+          const nm = String(w.name_en ?? '').trim()
+          // Skip junk pages (placeholders / templates without a real name).
+          if (nm && nm !== '??') {
+            nw.push({ title: label, name: nm, wiki: w, variants, selected: true })
+          }
         }
       } catch (e) {
-        errs.push({ name: label, reason: e instanceof Error ? e.message : 'erreur' })
+        // For existing animals a missing infobox is a real error; for category
+        // candidates it just means the page isn't an animal, so skip silently.
+        if (existing) errs.push({ name: label, reason: e instanceof Error ? e.message : 'erreur' })
       }
       done++
       await sleep(THROTTLE_MS)
