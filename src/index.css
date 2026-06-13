@@ -166,6 +166,14 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 8px;
 }
+.sync-new {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.sync-new select {
+  max-width: 320px;
+}
 .sync-upd {
   display: flex;
   flex-wrap: wrap;

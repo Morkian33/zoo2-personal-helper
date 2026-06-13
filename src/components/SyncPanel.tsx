@@ -26,7 +26,8 @@ interface NewItem {
   name: string
   wiki: WikiAnimal
   variants: WikiVariant[]
-  selected: boolean
+  // 'create' = insert, 'skip' = ignore, number = link to an existing animal id (rename).
+  action: 'create' | 'skip' | number
 }
 
 export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onApplied: () => Promise<void> }) {
@@ -77,6 +78,13 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
 
   const knownBiomes = useMemo(
     () => [...new Set(entries.map((e) => e.biome).filter(Boolean))] as string[],
+    [entries],
+  )
+  const existingOptions = useMemo(
+    () =>
+      entries
+        .map((e) => ({ id: e.id, label: e.name_fr ?? e.name_en }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'fr')),
     [entries],
   )
 
@@ -157,7 +165,7 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
         }
       } else if (mode !== 'update') {
         const nm = String(w.name_en ?? '').trim()
-        if (nm && nm !== '??') nw.push({ title: it.requested, name: nm, wiki: w, variants, selected: true })
+        if (nm && nm !== '??') nw.push({ title: it.requested, name: nm, wiki: w, variants, action: 'create' })
       }
     }
 
@@ -168,11 +176,11 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
     setPhase('review')
   }
 
-  function buildInsertRow(w: WikiAnimal, title: string): Record<string, unknown> {
+  // Wiki-sourced fields for an animal row: identity (name_en, wiki_title, url) + stats.
+  function wikiRow(w: WikiAnimal, title: string): Record<string, unknown> {
     const row: Record<string, unknown> = {
       name_en: w.name_en ?? title,
-      variant: false,
-      wiki_title: w.name_en ?? title,
+      wiki_title: title,
       url: urlForTitle(title),
     }
     for (const f of [...SYNC_NUM, ...SYNC_STR]) if (w[f] != null) row[f] = w[f]
@@ -183,6 +191,7 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
     setPhase('applying')
     let updated = 0
     let added = 0
+    let renamed = 0
     try {
       for (const u of updates) {
         if (Object.keys(u.diff).length) {
@@ -194,18 +203,28 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
         }
         if (u.variants.length) await upsertVariants(u.id, u.variants)
       }
-      for (const n of news.filter((x) => x.selected)) {
-        const { data, error } = await supabase
-          .from('animals')
-          .insert(buildInsertRow(n.wiki, n.title))
-          .select('id')
-          .single()
-        if (error) throw error
-        if (n.variants.length) await upsertVariants(data.id as number, n.variants)
-        added++
+      for (const n of news) {
+        if (n.action === 'skip') continue
+        if (n.action === 'create') {
+          const { data, error } = await supabase
+            .from('animals')
+            .insert({ ...wikiRow(n.wiki, n.title), variant: false })
+            .select('id')
+            .single()
+          if (error) throw error
+          if (n.variants.length) await upsertVariants(data.id as number, n.variants)
+          added++
+        } else {
+          // Rename: update the linked existing row's name/url/fields, keeping its id.
+          const id = n.action
+          const { error } = await supabase.from('animals').update(wikiRow(n.wiki, n.title)).eq('id', id)
+          if (error) throw error
+          if (n.variants.length) await upsertVariants(id, n.variants)
+          renamed++
+        }
       }
       await onApplied()
-      setDoneMsg(`${updated} animal(aux) mis à jour, ${added} ajouté(s).`)
+      setDoneMsg(`${updated} mis à jour · ${added} ajouté(s) · ${renamed} renommé(s).`)
       setPhase('done')
     } catch (e) {
       setDoneMsg('Erreur : ' + (e instanceof Error ? e.message : 'inconnue'))
@@ -213,7 +232,7 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
     }
   }
 
-  const selectedNew = news.filter((n) => n.selected).length
+  const selectedNew = news.filter((n) => n.action !== 'skip').length
 
   return (
     <div className="sync">
@@ -266,17 +285,29 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
               <summary>Nouveaux animaux (décoche le doublon renommé éventuel)</summary>
               <div className="sync-list">
                 {news.map((n, i) => (
-                  <label key={n.title} className="admin-check">
-                    <input
-                      type="checkbox"
-                      checked={n.selected}
+                  <div key={n.title} className="sync-new">
+                    <select
+                      value={typeof n.action === 'number' ? String(n.action) : n.action}
                       disabled={phase !== 'review'}
-                      onChange={(e) =>
-                        setNews((list) => list.map((x, j) => (j === i ? { ...x, selected: e.target.checked } : x)))
-                      }
-                    />
-                    {n.name} <span className="muted">({n.title})</span>
-                  </label>
+                      onChange={(e) => {
+                        const v = e.target.value
+                        const action: 'create' | 'skip' | number =
+                          v === 'create' || v === 'skip' ? v : Number(v)
+                        setNews((list) => list.map((x, j) => (j === i ? { ...x, action } : x)))
+                      }}
+                    >
+                      <option value="create">➕ Créer : {n.name}</option>
+                      <option value="skip">Ignorer</option>
+                      <optgroup label="Lier à un existant (rename)">
+                        {existingOptions.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                    <span className="muted">({n.title})</span>
+                  </div>
                 ))}
               </div>
             </details>
