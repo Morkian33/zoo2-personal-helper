@@ -170,7 +170,12 @@ export function CatalogView({ userId }: { userId: string | null }) {
       )}
 
       {tab === 'collections' && (
-        <CollectionsView entries={entries} collections={collections} requirements={requirements} />
+        <CollectionsView
+          entries={entries}
+          shelters={shelters}
+          collections={collections}
+          requirements={requirements}
+        />
       )}
 
       {tab === 'admin' && isAdmin && (

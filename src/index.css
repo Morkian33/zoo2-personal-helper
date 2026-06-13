@@ -192,7 +192,10 @@ button:disabled {
 .coll-req.ok {
   color: var(--text);
 }
-.coll-req:not(.ok) {
+.coll-req.work {
+  color: var(--accent);
+}
+.coll-req:not(.ok):not(.work) {
   color: var(--muted);
 }
 

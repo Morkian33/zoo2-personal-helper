@@ -1,16 +1,19 @@
 import { useMemo, useState } from 'react'
-import type { AnimalEntry } from '../lib/types'
+import { canBreed } from '../lib/catalog'
+import type { AnimalEntry, ShelterLevels } from '../lib/types'
 import type { CollectionRow, CollectionRequirementRow } from '../lib/collections'
 
-type Filter = 'all' | 'incomplete' | 'levelable'
-type Status = 'complete' | 'levelable' | 'needs'
+type Filter = 'all' | 'incomplete' | 'reachable'
+type Status = 'complete' | 'reachable' | 'blocked'
 
 export function CollectionsView({
   entries,
+  shelters,
   collections,
   requirements,
 }: {
   entries: AnimalEntry[]
+  shelters: ShelterLevels
   collections: CollectionRow[]
   requirements: CollectionRequirementRow[]
 }) {
@@ -18,17 +21,13 @@ export function CollectionsView({
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
 
-  const { animalById, variantById, reqsByCol } = useMemo(() => {
+  const { animalById, variantMax, reqsByCol } = useMemo(() => {
     const animalById = new Map(entries.map((e) => [e.id, e]))
-    const variantById = new Map<number, { label: string; max: number | null; owned: boolean }>()
+    const variantMax = new Map<number, { label: string; max: number | null }>()
     for (const e of entries) {
       const base = e.name_fr ?? e.name_en
       for (const v of e.variants) {
-        variantById.set(v.id, {
-          label: `${base} (${v.coat_name_fr ?? v.coat_name})`,
-          max: v.max_level,
-          owned: v.owned,
-        })
+        variantMax.set(v.id, { label: `${base} (${v.coat_name_fr ?? v.coat_name})`, max: v.max_level })
       }
     }
     const reqsByCol = new Map<number, CollectionRequirementRow[]>()
@@ -37,19 +36,30 @@ export function CollectionsView({
       list.push(r)
       reqsByCol.set(r.collection_id, list)
     }
-    return { animalById, variantById, reqsByCol }
+    return { animalById, variantMax, reqsByCol }
   }, [entries, requirements])
 
-  function reqInfo(r: CollectionRequirementRow): { label: string; your: number | null; owned: boolean } {
-    if (r.variant_id != null) {
-      const v = variantById.get(r.variant_id)
-      return { label: v?.label ?? '(variant ?)', your: v?.max ?? null, owned: v?.owned ?? false }
-    }
+  // For a requirement: your level, whether it's met, and whether the species is
+  // breedable (so you can raise/produce it — needed to level up, per the game).
+  function reqInfo(r: CollectionRequirementRow): {
+    label: string
+    your: number | null
+    met: boolean
+    breedable: boolean
+  } {
     const a = animalById.get(r.animal_id)
+    const breedable = a ? canBreed(a, shelters) : false
+    if (r.variant_id != null) {
+      const v = variantMax.get(r.variant_id)
+      const your = v?.max ?? null
+      return { label: v?.label ?? '(variant ?)', your, met: your != null && your >= r.required_level, breedable }
+    }
+    const your = a?.max_level ?? null
     return {
       label: a ? (a.name_fr ?? a.name_en) : '(animal ?)',
-      your: a?.max_level ?? null,
-      owned: (a?.owned_count ?? 0) > 0,
+      your,
+      met: your != null && your >= r.required_level,
+      breedable,
     }
   }
 
@@ -60,36 +70,35 @@ export function CollectionsView({
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase()
-    const out = collections
+    return collections
       .filter((c) => (!sector || c.sector === sector) && (!q || c.name.toLowerCase().includes(q)))
       .map((c) => {
         const reqs = reqsByCol.get(c.id) ?? []
         let met = 0
-        let owned = 0
+        let workable = 0 // met, or breedable so you can finish it yourself
         for (const r of reqs) {
           const info = reqInfo(r)
-          if (info.your != null && info.your >= r.required_level) met++
-          if (info.owned) owned++
+          if (info.met) met++
+          if (info.met || info.breedable) workable++
         }
         const status: Status =
           reqs.length > 0 && met === reqs.length
             ? 'complete'
-            : reqs.length > 0 && owned === reqs.length
-              ? 'levelable'
-              : 'needs'
+            : reqs.length > 0 && workable === reqs.length
+              ? 'reachable'
+              : 'blocked'
         return { col: c, reqs, met, total: reqs.length, status }
       })
       .filter((x) => {
         if (filter === 'incomplete') return x.status !== 'complete'
-        if (filter === 'levelable') return x.status === 'levelable'
+        if (filter === 'reachable') return x.status === 'reachable'
         return true
       })
-    return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [collections, reqsByCol, sector, search, filter, animalById, variantById])
+  }, [collections, reqsByCol, sector, search, filter, animalById, variantMax, shelters])
 
   const completeCount = rows.filter((r) => r.status === 'complete').length
-  const levelableCount = rows.filter((r) => r.status === 'levelable').length
+  const reachableCount = rows.filter((r) => r.status === 'reachable').length
 
   if (collections.length === 0) {
     return (
@@ -119,10 +128,10 @@ export function CollectionsView({
         <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}>
           <option value="all">Toutes</option>
           <option value="incomplete">Masquer les complètes</option>
-          <option value="levelable">À niveau près (tout possédé)</option>
+          <option value="reachable">À ta portée (tout élevable)</option>
         </select>
         <span className="count">
-          {completeCount} complètes · {levelableCount} à niveler
+          {completeCount} complètes · {reachableCount} à ta portée
         </span>
       </div>
 
@@ -131,7 +140,7 @@ export function CollectionsView({
           <details key={col.id} className={`coll ${status}`}>
             <summary>
               <span className="coll-star">{'★'.repeat(col.star ?? 0)}</span> {col.name}
-              {status === 'levelable' && <span className="badge">à niveler</span>}
+              {status === 'reachable' && <span className="badge">à ta portée</span>}
               <span className="coll-prog">
                 {met}/{total}
                 {status === 'complete' ? ' ✓' : ''}
@@ -139,15 +148,15 @@ export function CollectionsView({
             </summary>
             <div className="coll-reqs">
               {reqs.map((r, i) => {
-                const { label, your, owned } = reqInfo(r)
-                const ok = your != null && your >= r.required_level
+                const { label, your, met: ok, breedable } = reqInfo(r)
                 return (
-                  <div key={i} className={`coll-req ${ok ? 'ok' : ''}`}>
-                    <span>{ok ? '✓' : owned ? '↑' : '○'}</span>
+                  <div key={i} className={`coll-req ${ok ? 'ok' : breedable ? 'work' : ''}`}>
+                    <span>{ok ? '✓' : breedable ? '↑' : '○'}</span>
                     <span>{label}</span>
                     <span className="muted">
                       Lv {r.required_level}
-                      {your != null ? ` · toi: ${your}` : owned ? ' · niveau ?' : ' · non possédé'}
+                      {your != null ? ` · toi: ${your}` : ''}
+                      {!ok && !breedable ? ' · non élevable' : ''}
                     </span>
                   </div>
                 )
