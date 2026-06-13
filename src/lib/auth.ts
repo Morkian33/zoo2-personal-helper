@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { getCaptchaToken } from './captcha'
 
 // The username chosen by the user is the login anchor. Supabase requires an email
 // for a password account, so we derive a stable internal email from it. The optional
@@ -17,7 +18,8 @@ export async function ensureAnonymousSession(): Promise<void> {
   } = await supabase.auth.getSession()
   if (session) return
 
-  const { error } = await supabase.auth.signInAnonymously()
+  const captchaToken = await getCaptchaToken()
+  const { error } = await supabase.auth.signInAnonymously({ options: { captchaToken } })
   if (error) throw error
 }
 
@@ -40,9 +42,11 @@ export async function secureAccount(opts: {
 
 // Signs in an existing user with their username + password.
 export async function login(username: string, password: string): Promise<void> {
+  const captchaToken = await getCaptchaToken()
   const { error } = await supabase.auth.signInWithPassword({
     email: usernameToEmail(username),
     password,
+    options: { captchaToken },
   })
   if (error) throw error
 }
