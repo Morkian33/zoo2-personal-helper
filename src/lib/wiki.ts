@@ -68,6 +68,7 @@ function num(s: string | undefined | null): number | null {
 }
 
 // Reformats a duration to a canonical "Xh Ym", tolerating wiki typos ("8h5m", "8h 5").
+// Hours are always kept when minutes are present (so "0h 47m" stays "0h 47m").
 function normalizeDuration(s: string | undefined): string | null {
   if (!s) return null
   const hm = /(\d+)\s*h/.exec(s)
@@ -75,13 +76,15 @@ function normalizeDuration(s: string | undefined): string | null {
   if (!hm && !mm) return s.trim() || null
   const h = hm ? Number(hm[1]) : 0
   let m = mm ? Number(mm[1]) : 0
+  let hasMinutes = mm != null
   if (hm && !mm) {
     const t = /(\d+)/.exec(s.slice(hm.index + hm[0].length))
-    if (t) m = Number(t[1])
+    if (t) {
+      m = Number(t[1])
+      hasMinutes = true
+    }
   }
-  if (h && m) return `${h}h ${m}m`
-  if (h) return `${h}h`
-  return `${m}m`
+  return hasMinutes ? `${h}h ${m}m` : `${h}h`
 }
 
 function valueTime(s: string | undefined): { value: number | null; time: string | null } {
