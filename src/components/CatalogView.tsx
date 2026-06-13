@@ -97,6 +97,39 @@ export function CatalogView({ userId }: { userId: string | null }) {
     )
   }
 
+  function patchVariantById(id: number, patch: Partial<VariantEntry>) {
+    setEntries((list) =>
+      list.map((a) =>
+        a.variants.some((v) => v.id === id)
+          ? { ...a, variants: a.variants.map((v) => (v.id === id ? { ...v, ...patch } : v)) }
+          : a,
+      ),
+    )
+  }
+
+  // Inline level editing from the Collections view: patch in-memory on input,
+  // persist (and mark owned) on blur.
+  function onLevelInput(kind: 'animal' | 'variant', id: number, level: number | null) {
+    if (kind === 'animal') patchEntry(id, { max_level: level })
+    else patchVariantById(id, { max_level: level })
+  }
+  function onLevelCommit(kind: 'animal' | 'variant', id: number) {
+    if (!userId) return
+    if (kind === 'animal') {
+      const e = entries.find((x) => x.id === id)
+      if (!e) return
+      const owned_count = e.max_level != null && e.owned_count < 1 ? 1 : e.owned_count
+      if (owned_count !== e.owned_count) patchEntry(id, { owned_count })
+      persistAnimal(e, { max_level: e.max_level, owned_count })
+    } else {
+      const v = entries.flatMap((e) => e.variants).find((x) => x.id === id)
+      if (!v) return
+      const owned = v.max_level != null ? true : v.owned
+      if (owned !== v.owned) patchVariantById(id, { owned })
+      persistVariant(v, { max_level: v.max_level, owned })
+    }
+  }
+
   function setShelter(b: string, level: number | null) {
     setShelters((prev) => {
       const next = new Map(prev)
@@ -175,6 +208,9 @@ export function CatalogView({ userId }: { userId: string | null }) {
           shelters={shelters}
           collections={collections}
           requirements={requirements}
+          editable={!!userId}
+          onLevelInput={onLevelInput}
+          onLevelCommit={onLevelCommit}
         />
       )}
 

@@ -11,11 +11,17 @@ export function CollectionsView({
   shelters,
   collections,
   requirements,
+  editable,
+  onLevelInput,
+  onLevelCommit,
 }: {
   entries: AnimalEntry[]
   shelters: ShelterLevels
   collections: CollectionRow[]
   requirements: CollectionRequirementRow[]
+  editable: boolean
+  onLevelInput: (kind: 'animal' | 'variant', id: number, level: number | null) => void
+  onLevelCommit: (kind: 'animal' | 'variant', id: number) => void
 }) {
   const [sector, setSector] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
@@ -149,15 +155,26 @@ export function CollectionsView({
             <div className="coll-reqs">
               {reqs.map((r, i) => {
                 const { label, your, met: ok, breedable } = reqInfo(r)
+                const kind = r.variant_id != null ? 'variant' : 'animal'
+                const id = r.variant_id ?? r.animal_id
                 return (
                   <div key={i} className={`coll-req ${ok ? 'ok' : breedable ? 'work' : ''}`}>
                     <span>{ok ? '✓' : breedable ? '↑' : '○'}</span>
                     <span>{label}</span>
-                    <span className="muted">
+                    <span className="muted req-need">
                       Lv {r.required_level}
-                      {your != null ? ` · toi: ${your}` : ''}
                       {!ok && !breedable ? ' · non élevable' : ''}
                     </span>
+                    <input
+                      className="lvl"
+                      type="number"
+                      min={0}
+                      title="ton niveau max"
+                      value={your ?? ''}
+                      disabled={!editable}
+                      onChange={(e) => onLevelInput(kind, id, e.target.value === '' ? null : Number(e.target.value))}
+                      onBlur={() => onLevelCommit(kind, id)}
+                    />
                   </div>
                 )
               })}
