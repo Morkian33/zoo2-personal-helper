@@ -176,6 +176,15 @@ export async function setBiomeLabel(nameEn: string, nameFr: string | null): Prom
   if (error) throw error
 }
 
+// Admin: set the FR name of an animal.
+export async function setAnimalNameFr(animalId: number, fr: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('animals')
+    .update({ name_fr: fr || null })
+    .eq('id', animalId)
+  if (error) throw error
+}
+
 // Admin: set the FR coat name of a variant.
 export async function setVariantCoatFr(variantId: number, fr: string | null): Promise<void> {
   const { error } = await supabase

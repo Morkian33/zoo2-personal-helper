@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { setBiomeLabel, setVariantCoatFr } from '../lib/catalog'
+import { setAnimalNameFr, setBiomeLabel, setVariantCoatFr } from '../lib/catalog'
 import type { AnimalEntry, BiomeLabels } from '../lib/types'
 
 // Admin editor for FR labels: biomes (global) and per-variant coat names.
@@ -14,6 +14,10 @@ export function TranslationsPanel({
     () => [...new Set(entries.map((e) => e.biome).filter(Boolean))].sort() as string[],
     [entries],
   )
+  const animals = useMemo(
+    () => [...entries].sort((a, b) => a.name_en.localeCompare(b.name_en, 'fr')),
+    [entries],
+  )
   const variants = useMemo(
     () =>
       entries
@@ -24,6 +28,9 @@ export function TranslationsPanel({
 
   const [biomeDraft, setBiomeDraft] = useState<Record<string, string>>(() =>
     Object.fromEntries(biomes.map((b) => [b, biomeLabels.get(b) ?? ''])),
+  )
+  const [animalDraft, setAnimalDraft] = useState<Record<number, string>>(() =>
+    Object.fromEntries(animals.map((a) => [a.id, a.name_fr ?? ''])),
   )
   const [variantDraft, setVariantDraft] = useState<Record<number, string>>(() =>
     Object.fromEntries(variants.map((v) => [v.id, v.coat_name_fr ?? ''])),
@@ -36,9 +43,13 @@ export function TranslationsPanel({
     setStatus(msg)
   }
 
+  const q = search.trim().toLowerCase()
+  const shownAnimals = animals.filter((a) => {
+    if (onlyMissing && (animalDraft[a.id] ?? '').trim()) return false
+    return !q || a.name_en.toLowerCase().includes(q)
+  })
   const shownVariants = variants.filter((v) => {
     if (onlyMissing && (variantDraft[v.id] ?? '').trim()) return false
-    const q = search.trim().toLowerCase()
     return !q || `${v.animal} ${v.coat_name}`.toLowerCase().includes(q)
   })
 
@@ -65,7 +76,6 @@ export function TranslationsPanel({
         ))}
       </div>
 
-      <h3>Coats de variants</h3>
       <div className="filters">
         <input
           type="search"
@@ -77,8 +87,31 @@ export function TranslationsPanel({
           <input type="checkbox" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} />
           Sans FR seulement
         </label>
-        <span className="count">{shownVariants.length}</span>
       </div>
+
+      <h3>
+        Noms d'animaux <span className="count">{shownAnimals.length}</span>
+      </h3>
+      <div className="admin-form">
+        {shownAnimals.map((a) => (
+          <label key={a.id}>
+            {a.name_en}
+            <input
+              value={animalDraft[a.id] ?? ''}
+              onChange={(e) => setAnimalDraft((d) => ({ ...d, [a.id]: e.target.value }))}
+              onBlur={() =>
+                setAnimalNameFr(a.id, animalDraft[a.id])
+                  .then(() => flash(`Animal « ${a.name_en} » enregistré`))
+                  .catch((e) => flash('Erreur : ' + (e instanceof Error ? e.message : '')))
+              }
+            />
+          </label>
+        ))}
+      </div>
+
+      <h3>
+        Coats de variants <span className="count">{shownVariants.length}</span>
+      </h3>
       <div className="admin-form">
         {shownVariants.map((v) => (
           <label key={v.id}>
