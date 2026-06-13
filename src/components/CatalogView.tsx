@@ -11,6 +11,7 @@ import { InventoryTable } from './InventoryTable'
 import { AdminPanel } from './AdminPanel'
 import { SyncPanel } from './SyncPanel'
 import { CollectionsSyncPanel } from './CollectionsSyncPanel'
+import { TranslationsPanel } from './TranslationsPanel'
 
 type Tab = 'analysis' | 'zoo' | 'collections' | 'admin'
 
@@ -219,6 +220,8 @@ export function CatalogView({ userId }: { userId: string | null }) {
           <SyncPanel entries={entries} onApplied={reload} />
           <hr />
           <CollectionsSyncPanel entries={entries} onApplied={reload} />
+          <hr />
+          <TranslationsPanel entries={entries} biomeLabels={biomeLabels} />
           <hr />
           <AdminPanel entries={entries} onSaved={() => void reload()} />
         </div>

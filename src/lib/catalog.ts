@@ -168,6 +168,23 @@ export async function setUserShelter(
   if (error) throw error
 }
 
+// Admin: set the FR label of a biome (global lookup).
+export async function setBiomeLabel(nameEn: string, nameFr: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('biome_labels')
+    .upsert({ name_en: nameEn, name_fr: nameFr || null }, { onConflict: 'name_en' })
+  if (error) throw error
+}
+
+// Admin: set the FR coat name of a variant.
+export async function setVariantCoatFr(variantId: number, fr: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('animal_variants')
+    .update({ coat_name_fr: fr || null })
+    .eq('id', variantId)
+  if (error) throw error
+}
+
 // Admin: upsert the variant coats of an animal (used after a wiki pre-fill).
 export async function upsertVariants(
   animalId: number,
