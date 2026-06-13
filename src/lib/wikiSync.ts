@@ -70,7 +70,7 @@ export async function listAnimalPages(): Promise<string[]> {
 }
 
 export interface BatchItem {
-  title: string
+  requested: string // the title we asked for (maps back to our catalog row)
   result?: WikiResult
   error?: string
 }
@@ -79,7 +79,8 @@ const BATCH_SIZE = 50
 const BATCH_DELAY_MS = 300
 
 // Fetches the wikitext of many pages in batches of 50 (one request each) and parses
-// them. Far fewer requests than one-per-page. `onProgress(done)` reports pages handled.
+// them. Each item keeps the REQUESTED title (resolving normalization + redirects), so a
+// page whose infobox title1 differs from its page name still maps back to our row.
 export async function fetchWikiBatch(
   titles: string[],
   knownBiomes: string[],
@@ -98,25 +99,35 @@ export async function fetchWikiBatch(
       const res = await fetch(`${API}?${p.toString()}`)
       if (!res.ok) throw new Error(`Wiki HTTP ${res.status}`)
       const d = await res.json()
-      for (const pg of d.query?.pages ?? []) {
-        const title = pg.title as string
-        if (pg.missing) {
-          out.push({ title, error: 'page manquante' })
+      const norm = new Map<string, string>((d.query?.normalized ?? []).map((r: { from: string; to: string }) => [r.from, r.to]))
+      const redir = new Map<string, string>((d.query?.redirects ?? []).map((r: { from: string; to: string }) => [r.from, r.to]))
+      const pages = new Map<string, { missing?: boolean; revisions?: { slots?: { main?: { content?: string } } }[] }>(
+        (d.query?.pages ?? []).map((pg: { title: string }) => [pg.title, pg]),
+      )
+      const resolve = (t: string) => {
+        let c = norm.get(t) ?? t
+        c = redir.get(c) ?? c
+        return c
+      }
+      for (const t of chunk) {
+        const pg = pages.get(resolve(t))
+        if (!pg || pg.missing) {
+          out.push({ requested: t, error: 'page manquante' })
           continue
         }
-        const wt: string | undefined = pg.revisions?.[0]?.slots?.main?.content
+        const wt = pg.revisions?.[0]?.slots?.main?.content
         if (!wt) {
-          out.push({ title, error: 'pas de contenu' })
+          out.push({ requested: t, error: 'pas de contenu' })
           continue
         }
         try {
-          out.push({ title, result: parseWikitext(wt, knownBiomes) })
+          out.push({ requested: t, result: parseWikitext(wt, knownBiomes) })
         } catch (e) {
-          out.push({ title, error: e instanceof Error ? e.message : 'parse' })
+          out.push({ requested: t, error: e instanceof Error ? e.message : 'parse' })
         }
       }
     } catch (e) {
-      for (const t of chunk) out.push({ title: t, error: e instanceof Error ? e.message : 'erreur' })
+      for (const t of chunk) out.push({ requested: t, error: e instanceof Error ? e.message : 'erreur' })
     }
     done += chunk.length
     onProgress?.(done)

@@ -85,7 +85,12 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
     setUpdates([])
     setNews([])
     setErrors([])
-    const byName = new Map(entries.map((e) => [e.name_en.toLowerCase(), e]))
+    // Match by the requested title (our row) first, then by the wiki's title1.
+    const entryByTitle = new Map<string, AnimalEntry>()
+    for (const e of entries) {
+      entryByTitle.set(e.name_en.toLowerCase(), e)
+      if (e.wiki_title) entryByTitle.set(e.wiki_title.toLowerCase(), e)
+    }
     const doExisting = mode !== 'insert'
     const doNew = mode !== 'update'
 
@@ -109,7 +114,6 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
     }
 
     const existingTitles = doExisting ? entries.map((e) => e.wiki_title ?? e.name_en) : []
-    const existingSet = new Set(existingTitles.map((t) => t.toLowerCase()))
     const titles = [...existingTitles, ...candidates]
     const total = titles.length
 
@@ -123,13 +127,17 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
     const errs: { name: string; reason: string }[] = []
 
     for (const it of items) {
+      const match =
+        entryByTitle.get(it.requested.toLowerCase()) ??
+        (it.result?.animal.name_en
+          ? entryByTitle.get(String(it.result.animal.name_en).toLowerCase())
+          : undefined)
       if (it.error || !it.result) {
-        // Errors only matter for existing animals; meta/candidate pages are skipped.
-        if (existingSet.has(it.title.toLowerCase())) errs.push({ name: it.title, reason: it.error ?? 'vide' })
+        // Errors only matter for our catalog rows; meta/candidate pages are skipped.
+        if (match) errs.push({ name: it.requested, reason: it.error ?? 'vide' })
         continue
       }
       const { animal: w, variants } = it.result
-      const match = w.name_en ? byName.get(String(w.name_en).toLowerCase()) : undefined
       if (match) {
         if (mode !== 'insert') {
           const diff = diffAnimal(match, w)
@@ -149,7 +157,7 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
         }
       } else if (mode !== 'update') {
         const nm = String(w.name_en ?? '').trim()
-        if (nm && nm !== '??') nw.push({ title: it.title, name: nm, wiki: w, variants, selected: true })
+        if (nm && nm !== '??') nw.push({ title: it.requested, name: nm, wiki: w, variants, selected: true })
       }
     }
 
