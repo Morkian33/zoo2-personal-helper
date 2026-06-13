@@ -6,9 +6,11 @@ import type { AnimalEntry, BiomeLabels } from '../lib/types'
 export function TranslationsPanel({
   entries,
   biomeLabels,
+  onEditAnimal,
 }: {
   entries: AnimalEntry[]
   biomeLabels: BiomeLabels
+  onEditAnimal: (id: number) => void
 }) {
   const biomes = useMemo(
     () => [...new Set(entries.map((e) => e.biome).filter(Boolean))].sort() as string[],
@@ -95,8 +97,18 @@ export function TranslationsPanel({
       <div className="admin-form">
         {shownAnimals.map((a) => (
           <label key={a.id}>
-            {a.name_en}
-            {a.biome && <span className="muted"> · {biomeLabels.get(a.biome) ?? a.biome}</span>}
+            <span className="label-row">
+              {a.name_en}
+              {a.biome && <span className="muted"> · {biomeLabels.get(a.biome) ?? a.biome}</span>}
+              <button
+                type="button"
+                className="link edit-jump"
+                title="Ouvrir dans l'onglet Animaux"
+                onClick={() => onEditAnimal(a.id)}
+              >
+                ✎
+              </button>
+            </span>
             <input
               value={animalDraft[a.id] ?? ''}
               onChange={(e) => setAnimalDraft((d) => ({ ...d, [a.id]: e.target.value }))}

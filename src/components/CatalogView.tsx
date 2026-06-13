@@ -29,6 +29,13 @@ export function CatalogView({ userId }: { userId: string | null }) {
   const [isAdmin, setIsAdmin] = useState(false)
   const [tab, setTab] = useState<Tab>('analysis')
   const [adminTab, setAdminTab] = useState<AdminTab>('sync')
+  const [editRequest, setEditRequest] = useState<{ id: number; nonce: number } | null>(null)
+
+  // From the FR-labels tab: jump to the Animaux tab with this animal loaded.
+  function editAnimal(id: number) {
+    setEditRequest((r) => ({ id, nonce: (r?.nonce ?? 0) + 1 }))
+    setAdminTab('animals')
+  }
 
   const reload = useCallback(async () => {
     const { entries, shelters, biomeLabels, collections, requirements } = await loadCatalog()
@@ -247,8 +254,12 @@ export function CatalogView({ userId }: { userId: string | null }) {
               <CollectionsSyncPanel entries={entries} onApplied={reload} />
             </>
           )}
-          {adminTab === 'animals' && <AdminPanel entries={entries} onSaved={() => void reload()} />}
-          {adminTab === 'labels' && <TranslationsPanel entries={entries} biomeLabels={biomeLabels} />}
+          {adminTab === 'animals' && (
+            <AdminPanel entries={entries} onSaved={() => void reload()} editRequest={editRequest} />
+          )}
+          {adminTab === 'labels' && (
+            <TranslationsPanel entries={entries} biomeLabels={biomeLabels} onEditAnimal={editAnimal} />
+          )}
         </div>
       )}
     </>

@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { fetchWikiAnimal, type WikiVariant } from '../lib/wiki'
 import { upsertVariants } from '../lib/catalog'
@@ -66,9 +66,13 @@ function entryToForm(e: AnimalEntry): FormState {
 export function AdminPanel({
   entries,
   onSaved,
+  editRequest,
 }: {
   entries: AnimalEntry[]
   onSaved: () => void
+  // External request to load a given animal (e.g. from the FR-labels tab). The
+  // nonce lets the same animal be re-requested.
+  editRequest?: { id: number; nonce: number } | null
 }) {
   const [search, setSearch] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -85,6 +89,14 @@ export function AdminPanel({
     () => [...new Set(entries.map((e) => e.biome).filter(Boolean))] as string[],
     [entries],
   )
+
+  // Load the animal requested from another tab.
+  useEffect(() => {
+    if (!editRequest) return
+    const e = entries.find((x) => x.id === editRequest.id)
+    if (e) loadEntry(e)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editRequest])
 
   async function fromWiki() {
     const url = String(form.url ?? '').trim()

@@ -312,6 +312,14 @@ button:disabled {
 .admin-form .changed input {
   border-color: var(--accent);
 }
+.label-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.edit-jump {
+  margin-left: auto;
+}
 .diff {
   font-size: 0.78rem;
   color: var(--accent);
