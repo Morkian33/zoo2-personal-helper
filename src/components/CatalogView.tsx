@@ -29,11 +29,17 @@ export function CatalogView({ userId }: { userId: string | null }) {
     setBiomeLabels(biomeLabels)
   }, [])
 
+  // Reload whenever the signed-in user changes (login / logout / secure), so the
+  // personal data (owned, shelters, variants) reflects the current account immediately.
   useEffect(() => {
+    let active = true
     reload()
-      .catch((e) => setError(e instanceof Error ? e.message : 'Erreur de chargement'))
-      .finally(() => setLoading(false))
-  }, [reload])
+      .catch((e) => active && setError(e instanceof Error ? e.message : 'Erreur de chargement'))
+      .finally(() => active && setLoading(false))
+    return () => {
+      active = false
+    }
+  }, [userId, reload])
 
   useEffect(() => {
     if (!userId) {
