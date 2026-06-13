@@ -176,11 +176,12 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
           </label>
           <p className="muted">
             {mode === 'insert'
-              ? 'Énumère le wiki et ne télécharge que les pages absentes de ta base — rapide, idéal après une release.'
+              ? 'Énumère le wiki et ne télécharge que les pages absentes de ta base — idéal après une release.'
               : mode === 'update'
-                ? `Retélécharge les ${entries.length} animaux existants pour les mettre à jour (plusieurs minutes).`
+                ? `Retélécharge les ${entries.length} animaux existants pour les mettre à jour.`
                 : `Les deux : ${entries.length} existants + les nouveaux du wiki.`}{' '}
-            Rien n'est écrit avant validation. name_fr / coat_name_fr préservés. ~1 req/s.
+            Récupération par lots de 50 pages (quelques secondes). Rien n'est écrit avant validation.
+            name_fr / coat_name_fr préservés.
           </p>
           <button onClick={analyze}>Analyser</button>
         </>
