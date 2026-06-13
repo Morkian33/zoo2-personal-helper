@@ -11,7 +11,6 @@ create table if not exists public.animals (
   name_fr                  text,
   biome                    text,
   shelter_lvl              int,
-  variant                  boolean not null default false,
   price_value              numeric,
   price_unit               text,
   size                     numeric,

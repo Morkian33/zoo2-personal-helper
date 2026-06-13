@@ -5,7 +5,6 @@ export interface AnimalRow {
   name_fr: string | null
   biome: string | null
   shelter_lvl: number | null
-  variant: boolean
   price_value: number | null
   price_unit: string | null
   size: number | null

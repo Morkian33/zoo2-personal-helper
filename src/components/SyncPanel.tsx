@@ -200,7 +200,7 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
         if (n.action === 'create') {
           const { data, error } = await supabase
             .from('animals')
-            .insert({ ...wikiRow(n.wiki, n.title), variant: false })
+            .insert(wikiRow(n.wiki, n.title))
             .select('id')
             .single()
           if (error) throw error
