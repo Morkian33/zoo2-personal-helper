@@ -65,9 +65,13 @@ export interface VariantRow {
   id: number
   animal_id: number
   coat_name: string
+  coat_name_fr: string | null
   obtained_from: string | null
   release_date: string | null
 }
+
+// Global biome label lookup (name_en -> name_fr).
+export type BiomeLabels = Map<string, string>
 
 // Per-user variant ownership (table public.user_variants).
 export interface UserVariantState {

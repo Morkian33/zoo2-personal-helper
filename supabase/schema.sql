@@ -149,6 +149,7 @@ create table if not exists public.animal_variants (
   id            bigint generated always as identity primary key,
   animal_id     bigint not null references public.animals(id) on delete cascade,
   coat_name     text   not null,
+  coat_name_fr  text,
   obtained_from text,
   release_date  date,
   unique (animal_id, coat_name)
@@ -191,3 +192,15 @@ create policy user_variants_update_own
 drop policy if exists user_variants_delete_own on public.user_variants;
 create policy user_variants_delete_own
   on public.user_variants for delete to authenticated using (user_id = auth.uid());
+
+-- ---------- Global FR biome labels ----------
+create table if not exists public.biome_labels (
+  name_en text primary key,
+  name_fr text
+);
+alter table public.biome_labels enable row level security;
+drop policy if exists biome_labels_read on public.biome_labels;
+create policy biome_labels_read on public.biome_labels for select to authenticated using (true);
+drop policy if exists biome_labels_admin_write on public.biome_labels;
+create policy biome_labels_admin_write on public.biome_labels for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());

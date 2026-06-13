@@ -10,3 +10,4 @@ dist-ssr
 *.tsbuildinfo
 supabase/seed_user_data.sql
 supabase/migration_admin.sql
+supabase/seed_user_variants.sql

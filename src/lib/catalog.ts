@@ -9,21 +9,24 @@ import type {
   VariantRow,
   VariantEntry,
   UserVariantState,
+  BiomeLabels,
 } from './types'
 
 export interface CatalogData {
   entries: AnimalEntry[]
   shelters: ShelterLevels
+  biomeLabels: BiomeLabels
 }
 
 // Loads the catalog (animals + variants) and the current user's personal state, merged.
 export async function loadCatalog(): Promise<CatalogData> {
-  const [animalsRes, userRes, shelterRes, variantsRes, userVarRes] = await Promise.all([
+  const [animalsRes, userRes, shelterRes, variantsRes, userVarRes, biomeRes] = await Promise.all([
     supabase.from('animals').select('*').order('name_en', { ascending: true }),
     supabase.from('user_animals').select('animal_id, owned_count, max_level'),
     supabase.from('user_shelters').select('biome, level'),
     supabase.from('animal_variants').select('*').order('coat_name', { ascending: true }),
     supabase.from('user_variants').select('variant_id, owned, max_level'),
+    supabase.from('biome_labels').select('name_en, name_fr'),
   ])
 
   if (animalsRes.error) throw animalsRes.error
@@ -58,6 +61,11 @@ export async function loadCatalog(): Promise<CatalogData> {
     variantsByAnimal.set(v.animal_id, list)
   }
 
+  const biomeLabels: BiomeLabels = new Map()
+  for (const row of biomeRes.data ?? []) {
+    if (row.name_fr) biomeLabels.set(row.name_en as string, row.name_fr as string)
+  }
+
   const entries = (animalsRes.data as AnimalRow[]).map((a) => {
     const st = states.get(a.id)
     return {
@@ -69,7 +77,7 @@ export async function loadCatalog(): Promise<CatalogData> {
     }
   })
 
-  return { entries, shelters }
+  return { entries, shelters, biomeLabels }
 }
 
 // True when the animal can be bred: at least 2 owned (any coats of the species) AND an

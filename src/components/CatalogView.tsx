@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { loadCatalog, setUserAnimal, setUserShelter, setUserVariant } from '../lib/catalog'
 import { shelterBiome } from '../lib/biome'
-import type { AnimalEntry, ShelterLevels, VariantEntry } from '../lib/types'
+import type { AnimalEntry, ShelterLevels, VariantEntry, BiomeLabels } from '../lib/types'
 import { SheltersPanel } from './SheltersPanel'
 import { AnalysisTable } from './AnalysisTable'
 import { InventoryTable } from './InventoryTable'
@@ -15,15 +15,17 @@ type Tab = 'analysis' | 'zoo' | 'admin'
 export function CatalogView({ userId }: { userId: string | null }) {
   const [entries, setEntries] = useState<AnimalEntry[]>([])
   const [shelters, setShelters] = useState<ShelterLevels>(new Map())
+  const [biomeLabels, setBiomeLabels] = useState<BiomeLabels>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [tab, setTab] = useState<Tab>('analysis')
 
   const reload = useCallback(async () => {
-    const { entries, shelters } = await loadCatalog()
+    const { entries, shelters, biomeLabels } = await loadCatalog()
     setEntries(entries)
     setShelters(shelters)
+    setBiomeLabels(biomeLabels)
   }, [])
 
   useEffect(() => {
@@ -112,7 +114,9 @@ export function CatalogView({ userId }: { userId: string | null }) {
         )}
       </nav>
 
-      {tab === 'analysis' && <AnalysisTable entries={entries} shelters={shelters} biomes={biomes} />}
+      {tab === 'analysis' && (
+        <AnalysisTable entries={entries} shelters={shelters} biomes={biomes} biomeLabels={biomeLabels} />
+      )}
 
       {tab === 'zoo' && (
         <div className="myzoo">
@@ -121,6 +125,7 @@ export function CatalogView({ userId }: { userId: string | null }) {
             entries={entries}
             shelters={shelters}
             biomes={biomes}
+            biomeLabels={biomeLabels}
             disabled={!userId}
             onSetOwned={(e, count) => {
               persistAnimal(e, { owned_count: count })

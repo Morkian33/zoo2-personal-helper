@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { canBreed } from '../lib/catalog'
 import { int, dec2, signed, ownedLabel } from '../lib/format'
-import type { AnimalEntry, ShelterLevels } from '../lib/types'
+import { biomeLabel } from '../lib/labels'
+import type { AnimalEntry, ShelterLevels, BiomeLabels } from '../lib/types'
 
 type SortDir = 'asc' | 'desc'
 
@@ -37,10 +38,12 @@ export function AnalysisTable({
   entries,
   shelters,
   biomes,
+  biomeLabels,
 }: {
   entries: AnimalEntry[]
   shelters: ShelterLevels
   biomes: string[]
+  biomeLabels: BiomeLabels
 }) {
   const [search, setSearch] = useState('')
   const [biome, setBiome] = useState('')
@@ -97,7 +100,7 @@ export function AnalysisTable({
           <option value="">Tous les biomes</option>
           {biomes.map((b) => (
             <option key={b} value={b}>
-              {b}
+              {biomeLabel(biomeLabels, b)}
             </option>
           ))}
         </select>
@@ -137,7 +140,14 @@ export function AnalysisTable({
               <tr key={e.id} className={e.owned_count > 0 ? 'owned' : ''}>
                 {COLUMNS.map((c) => {
                   const v = c.get(e)
-                  const text = v == null ? '—' : typeof v === 'number' ? (c.format ?? int)(v) : v
+                  const text =
+                    v == null
+                      ? '—'
+                      : c.key === 'biome'
+                        ? biomeLabel(biomeLabels, v as string)
+                        : typeof v === 'number'
+                          ? (c.format ?? int)(v)
+                          : v
                   return (
                     <td key={c.key} className={c.type === 'num' ? 'num' : ''}>
                       {text}

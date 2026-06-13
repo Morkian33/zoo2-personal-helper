@@ -1,12 +1,14 @@
 import { Fragment, useMemo, useState } from 'react'
 import { canBreed } from '../lib/catalog'
-import type { AnimalEntry, ShelterLevels, VariantEntry } from '../lib/types'
+import { biomeLabel } from '../lib/labels'
+import type { AnimalEntry, ShelterLevels, VariantEntry, BiomeLabels } from '../lib/types'
 
 // Data-entry table: set owned count + max level per animal, and ownership of variant coats.
 export function InventoryTable({
   entries,
   shelters,
   biomes,
+  biomeLabels,
   disabled,
   onSetOwned,
   onSetMaxLevel,
@@ -18,6 +20,7 @@ export function InventoryTable({
   entries: AnimalEntry[]
   shelters: ShelterLevels
   biomes: string[]
+  biomeLabels: BiomeLabels
   disabled: boolean
   onSetOwned: (e: AnimalEntry, count: number) => void
   onSetMaxLevel: (e: AnimalEntry, value: number | null) => void
@@ -67,7 +70,7 @@ export function InventoryTable({
           <option value="">Tous les biomes</option>
           {biomes.map((b) => (
             <option key={b} value={b}>
-              {b}
+              {biomeLabel(biomeLabels, b)}
             </option>
           ))}
         </select>
@@ -107,7 +110,7 @@ export function InventoryTable({
                         (e.name_fr ?? e.name_en)
                       )}
                     </td>
-                    <td>{e.biome ?? '—'}</td>
+                    <td>{biomeLabel(biomeLabels, e.biome)}</td>
                     <td className="num">{e.shelter_lvl ?? '—'}</td>
                     <td className="center">
                       <select
@@ -139,7 +142,7 @@ export function InventoryTable({
                   {isOpen &&
                     e.variants.map((v) => (
                       <tr key={`v${v.id}`} className="variant-row">
-                        <td className="variant-name">↳ {v.coat_name}</td>
+                        <td className="variant-name">↳ {v.coat_name_fr ?? v.coat_name}</td>
                         <td className="muted">
                           {v.obtained_from ?? '—'}
                           {v.release_date ? ` · ${v.release_date}` : ''}
