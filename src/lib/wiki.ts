@@ -110,14 +110,14 @@ function num(s: string | undefined | null): number | null {
   return digits ? Number(digits) : null
 }
 
-// Reformats a duration to a canonical "Xh Ym", tolerating wiki typos ("8h5m", "8h 5").
-// Hours are always kept when minutes are present (so "0h 47m" stays "0h 47m").
+// Reformats a duration to a canonical "Xh Ym", tolerating wiki typos:
+// "8h5m", "8h 5" (missing m), "10 32m" (missing h). Hours kept when minutes present.
 function normalizeDuration(s: string | undefined): string | null {
   if (!s) return null
   const hm = /(\d+)\s*h/.exec(s)
   const mm = /(\d+)\s*m/.exec(s)
   if (!hm && !mm) return s.trim() || null
-  const h = hm ? Number(hm[1]) : 0
+  let h = hm ? Number(hm[1]) : 0
   let m = mm ? Number(mm[1]) : 0
   let hasMinutes = mm != null
   if (hm && !mm) {
@@ -126,15 +126,32 @@ function normalizeDuration(s: string | undefined): string | null {
       m = Number(t[1])
       hasMinutes = true
     }
+  } else if (!hm && mm) {
+    // "10 32m": the "h" is missing — the first number is the hours.
+    const nums = s.match(/\d+/g) ?? []
+    if (nums.length >= 2) h = Number(nums[0])
   }
   return hasMinutes ? `${h}h ${m}m` : `${h}h`
 }
 
+// "164 (11h 10m)" / "186 11h 47m)" (broken parens) / "348 (10 32m)" -> value + time.
 function valueTime(s: string | undefined): { value: number | null; time: string | null } {
   if (!s) return { value: null, time: null }
-  const m = s.match(/\s*([\d.,]+)\s*\(([^)]+)\)/)
-  if (m) return { value: num(m[1]), time: normalizeDuration(m[2]) }
-  return { value: num(s), time: null }
+  const m = /^([\d.,]+)\s*(.*)$/.exec(s.trim())
+  if (!m) return { value: num(s), time: null }
+  const rest = m[2].trim().replace(/^\(/, '').replace(/\)$/, '').trim()
+  return { value: num(m[1]), time: rest ? normalizeDuration(rest) : null }
+}
+
+// Extracts the canonical biome from a value like "[[Biomes#Grassland|Grass]]"
+// (the anchor, "Grassland", not the display text "Grass") or a plain "Grassland".
+function biomeFromWiki(raw: string): string {
+  let s = raw.trim()
+  const link = s.match(/\[\[([^\]]*)\]\]/)
+  if (link) s = link[1]
+  if (s.includes('#')) s = s.split('#')[1]
+  if (s.includes('|')) s = s.split('|')[0]
+  return s.trim()
 }
 
 const MONTHS: Record<string, number> = {
@@ -168,11 +185,18 @@ function levenshtein(a: string, b: string): number {
   return dp[m][n]
 }
 
-// Maps a scraped biome to a known one, tolerating wiki typos (e.g. "Savana" -> "Savanna").
+// Short biome names the wiki uses instead of the canonical ones.
+const BIOME_SYNONYMS: Record<string, string> = {
+  grass: 'Grassland',
+}
+
+// Maps a scraped biome to a known one, tolerating wiki typos (e.g. "Savana" -> "Savanna")
+// and short synonyms (e.g. "Grass" -> "Grassland").
 function normalizeBiome(raw: string | undefined, known: string[]): string | null {
   if (!raw) return null
   const t = raw.trim()
   const lc = t.toLowerCase()
+  if (BIOME_SYNONYMS[lc]) return BIOME_SYNONYMS[lc]
   const exact = known.find((b) => b.toLowerCase() === lc)
   if (exact) return exact
   let best: string | null = null
@@ -246,7 +270,7 @@ export function parseWikitext(wt: string, knownBiomes: string[] = []): WikiResul
     if (v !== null && v !== undefined && v !== '') (out as Record<string, unknown>)[k] = v
   }
   set('name_en', ib.title1)
-  set('biome', normalizeBiome(ib.biome ? cleanLinks(ib.biome) : undefined, knownBiomes))
+  set('biome', normalizeBiome(ib.biome ? biomeFromWiki(ib.biome) : undefined, knownBiomes))
   set('shelter_lvl', num(ib.shelter_level))
   set('breed_proba', prob != null ? prob / 100 : null)
   set('breed_cost', num(ib.cost))

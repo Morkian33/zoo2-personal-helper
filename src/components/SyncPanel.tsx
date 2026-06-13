@@ -37,6 +37,43 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
   const [news, setNews] = useState<NewItem[]>([])
   const [errors, setErrors] = useState<{ name: string; reason: string }[]>([])
   const [doneMsg, setDoneMsg] = useState('')
+  const [copyMsg, setCopyMsg] = useState('')
+
+  function reportText(): string {
+    const lines: string[] = [
+      `Sync — ${updates.length} maj · ${news.length} nouveaux · ${errors.length} erreurs`,
+      '',
+    ]
+    if (news.length) {
+      lines.push('## Nouveaux')
+      for (const n of news) lines.push(`- ${n.name} (${n.title})`)
+      lines.push('')
+    }
+    if (updates.length) {
+      lines.push('## Changements')
+      for (const u of updates) {
+        lines.push(u.name)
+        const fields = Object.entries(u.diff)
+        if (!fields.length) lines.push('  (variants seulement)')
+        for (const [f, { from, to }] of fields) lines.push(`  ${f}: ${from ?? '∅'} → ${to}`)
+      }
+      lines.push('')
+    }
+    if (errors.length) {
+      lines.push('## Erreurs')
+      for (const e of errors) lines.push(`- ${e.name} : ${e.reason}`)
+    }
+    return lines.join('\n')
+  }
+
+  async function copyReport() {
+    try {
+      await navigator.clipboard.writeText(reportText())
+      setCopyMsg('Copié ✔')
+    } catch {
+      setCopyMsg('Échec de la copie')
+    }
+  }
 
   const knownBiomes = useMemo(
     () => [...new Set(entries.map((e) => e.biome).filter(Boolean))] as string[],
@@ -198,6 +235,12 @@ export function SyncPanel({ entries, onApplied }: { entries: AnimalEntry[]; onAp
           <p>
             <strong>{updates.length}</strong> existant(s) à modifier · <strong>{news.length}</strong> nouveau(x)
             détecté(s) ({selectedNew} sélectionné(s)) · <strong>{errors.length}</strong> erreur(s)
+          </p>
+          <p>
+            <button className="small" onClick={copyReport}>
+              Copier le rapport
+            </button>
+            {copyMsg && <span className="muted"> {copyMsg}</span>}
           </p>
 
           {news.length > 0 && (

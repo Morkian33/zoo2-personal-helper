@@ -1,4 +1,5 @@
 import { fetchWikiAnimal, wikiTitleFromUrl, parseWikitext } from './wiki'
+import { shelterBiome } from './biome'
 import type { WikiResult } from './wiki'
 import type { AnimalEntry, AnimalRow } from './types'
 
@@ -32,6 +33,9 @@ export function diffAnimal(cur: Partial<AnimalRow>, w: Partial<AnimalRow>): Fiel
   for (const f of SYNC_STR) {
     const wv = w[f]
     if (wv == null) continue
+    // Biomes sharing a shelter (e.g. "Water Oceanside Zoo" vs wiki "Water") are not a
+    // change — keep the manual Oceanside refinement instead of reverting to "Water".
+    if (f === 'biome' && shelterBiome(String(cur.biome ?? '')) === shelterBiome(String(wv))) continue
     if (String(cur[f] ?? '') !== String(wv)) diff[f] = { from: cur[f] ?? null, to: wv }
   }
   return diff
