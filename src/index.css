@@ -136,6 +136,43 @@ button:disabled {
 }
 
 /* ---------- Admin ---------- */
+.admin-tab {
+  display: grid;
+  gap: 1.2rem;
+}
+.admin-tab hr {
+  width: 100%;
+  border: none;
+  border-top: 1px solid var(--line);
+}
+.sync h2 {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+}
+.sync details {
+  margin: 0.5rem 0;
+}
+.sync summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+.sync-list {
+  max-height: 300px;
+  overflow: auto;
+  margin: 0.5rem 0;
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.sync-upd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: baseline;
+  font-size: 0.85rem;
+}
 .admin {
   display: grid;
   gap: 1.2rem;

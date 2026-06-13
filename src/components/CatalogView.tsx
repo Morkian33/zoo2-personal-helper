@@ -7,6 +7,7 @@ import { SheltersPanel } from './SheltersPanel'
 import { AnalysisTable } from './AnalysisTable'
 import { InventoryTable } from './InventoryTable'
 import { AdminPanel } from './AdminPanel'
+import { SyncPanel } from './SyncPanel'
 
 type Tab = 'analysis' | 'zoo' | 'admin'
 
@@ -150,7 +151,11 @@ export function CatalogView({ userId }: { userId: string | null }) {
       )}
 
       {tab === 'admin' && isAdmin && (
-        <AdminPanel entries={entries} onSaved={() => void reload()} />
+        <div className="admin-tab">
+          <SyncPanel entries={entries} onApplied={reload} />
+          <hr />
+          <AdminPanel entries={entries} onSaved={() => void reload()} />
+        </div>
       )}
     </>
   )
