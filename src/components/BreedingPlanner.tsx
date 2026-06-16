@@ -67,14 +67,14 @@ export function BreedingPlanner({ entries }: { entries: AnimalEntry[] }) {
 
   return (
     <div className="planner">
-      <div className="filters">
+      <div className="admin-search">
         <input
           type="search"
           placeholder="Choisir un animal à élever…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        {search.trim() && (
+        {search.trim() && filtered.length > 0 && (
           <ul className="admin-matches">
             {filtered.slice(0, 12).map((e) => (
               <li key={e.id}>
