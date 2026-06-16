@@ -5,6 +5,7 @@ import { shelterBiome } from '../lib/biome'
 import type { AnimalEntry, ShelterLevels, VariantEntry, BiomeLabels } from '../lib/types'
 import type { CollectionRow, CollectionRequirementRow } from '../lib/collections'
 import { CollectionsView } from './CollectionsView'
+import { BreedingPlanner } from './BreedingPlanner'
 import { SheltersPanel } from './SheltersPanel'
 import { AnalysisTable } from './AnalysisTable'
 import { InventoryTable } from './InventoryTable'
@@ -13,7 +14,7 @@ import { SyncPanel } from './SyncPanel'
 import { CollectionsSyncPanel } from './CollectionsSyncPanel'
 import { TranslationsPanel } from './TranslationsPanel'
 
-type Tab = 'analysis' | 'zoo' | 'collections' | 'admin'
+type Tab = 'analysis' | 'zoo' | 'collections' | 'breeding' | 'admin'
 type AdminTab = 'sync' | 'animals' | 'labels'
 
 // Container: owns catalog data + personal state, and switches between the
@@ -170,6 +171,12 @@ export function CatalogView({ userId }: { userId: string | null }) {
         >
           Collections
         </button>
+        <button
+          className={`tab ${tab === 'breeding' ? 'active' : ''}`}
+          onClick={() => setTab('breeding')}
+        >
+          Élevage
+        </button>
         {isAdmin && (
           <button className={`tab ${tab === 'admin' ? 'active' : ''}`} onClick={() => setTab('admin')}>
             Admin
@@ -223,6 +230,8 @@ export function CatalogView({ userId }: { userId: string | null }) {
           onLevelCommit={onLevelCommit}
         />
       )}
+
+      {tab === 'breeding' && <BreedingPlanner entries={entries} />}
 
       {tab === 'admin' && isAdmin && (
         <div className="admin-tab">

@@ -377,6 +377,28 @@ button:disabled {
   border-color: transparent;
 }
 
+.planner {
+  display: grid;
+  gap: 1rem;
+}
+.planner-head {
+  display: grid;
+  gap: 0.5rem;
+}
+.planner-head h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.planner-head .admin-check {
+  width: fit-content;
+}
+.wtp {
+  width: fit-content;
+}
+.wtp input {
+  width: 140px;
+}
+
 .myzoo {
   display: grid;
   gap: 1.5rem;
