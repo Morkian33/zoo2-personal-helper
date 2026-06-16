@@ -28,6 +28,7 @@ const COLUMNS: Column[] = [
   { key: 'xpday', label: 'XP/jour', type: 'num', get: (e) => e.metrics.sumXpPerDay, format: int },
   { key: 'xphsa', label: 'XP/h /taille aj.', type: 'num', get: (e) => e.metrics.sumXpPerHourPerSizeAdjusted, format: dec2 },
   { key: 'popsa', label: 'Pop /taille aj.', type: 'num', get: (e) => e.metrics.popularityPerSizeAdjusted, format: dec2 },
+  { key: 'feedx2', label: 'Feed×2 XP/pièce', type: 'num', get: (e) => e.metrics.feedX2XpPerCoin, format: dec2 },
   { key: 'attempts', label: 'Tentatives moy.', type: 'num', get: (e) => e.metrics.averageAttempts, format: dec2 },
   { key: 'newborn', label: 'Coût nouveau-né', type: 'num', get: (e) => e.metrics.newbornCost, format: int },
   { key: 'bdelta', label: 'Δ élevage', type: 'num', get: (e) => e.metrics.breedingDelta, format: signed },

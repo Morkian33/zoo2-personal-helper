@@ -32,6 +32,10 @@ export function computeMetrics(a: AnimalRow): AnimalMetrics {
   const div = (n: number | null, d: number | null | undefined) =>
     n != null && d != null && d !== 0 ? n / d : null
 
+  // "Feed x2" doubles the XP of one feeding, so the extra XP gained by paying is
+  // xp_feeding_value, for a cost of feed_x2_cost. Higher = more XP per coin spent.
+  const feedX2XpPerCoin = div(a.xp_feeding_value, a.feed_x2_cost)
+
   const averageAttempts =
     a.breed_proba != null && a.breed_proba > 0 ? averageBreedingAttempts(a.breed_proba) : null
 
@@ -64,6 +68,7 @@ export function computeMetrics(a: AnimalRow): AnimalMetrics {
     sumXpPerDay: sumXpPerHour != null ? sumXpPerHour * 24 : null,
     popularityPerSize: div(a.popularity, a.size),
     popularityPerSizeAdjusted: div(a.popularity, sizeAdjusted),
+    feedX2XpPerCoin,
     averageAttempts,
     newbornCost,
     breedingDelta,

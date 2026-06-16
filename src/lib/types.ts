@@ -40,6 +40,7 @@ export interface AnimalMetrics {
   sumXpPerDay: number | null
   popularityPerSize: number | null
   popularityPerSizeAdjusted: number | null
+  feedX2XpPerCoin: number | null
   averageAttempts: number | null
   newbornCost: number | null
   breedingDelta: number | null
