@@ -46,13 +46,15 @@ export function TranslationsPanel({
     setStatus(msg)
   }
 
+  // Filter on the original DB value, not the live draft — otherwise a row would
+  // vanish mid-typing as soon as its draft becomes non-empty.
   const q = norm(search.trim())
   const shownAnimals = animals.filter((a) => {
-    if (onlyMissing && (animalDraft[a.id] ?? '').trim()) return false
+    if (onlyMissing && (a.name_fr ?? '').trim()) return false
     return !q || norm(a.name_en).includes(q)
   })
   const shownVariants = variants.filter((v) => {
-    if (onlyMissing && (variantDraft[v.id] ?? '').trim()) return false
+    if (onlyMissing && (v.coat_name_fr ?? '').trim()) return false
     return !q || norm(`${v.animal} ${v.coat_name}`).includes(q)
   })
 
