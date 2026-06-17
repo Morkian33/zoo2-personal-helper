@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { canBreed } from '../lib/catalog'
 import { int, dec2, signed, ownedLabel, norm } from '../lib/format'
 import { biomeLabel } from '../lib/labels'
@@ -7,6 +7,39 @@ import { COOLDOWN_HOURS, bestPolicyLabel } from '../lib/breedingPlan'
 import type { AnimalEntry, ShelterLevels, BiomeLabels } from '../lib/types'
 
 type SortDir = 'asc' | 'desc'
+
+interface Filters {
+  search: string
+  biome: string
+  ownedFilter: 'all' | 'owned' | 'not'
+  breedFilter: 'all' | 'yes'
+  sortKey: string
+  sortDir: SortDir
+}
+const DEFAULT_FILTERS: Filters = {
+  search: '',
+  biome: '',
+  ownedFilter: 'all',
+  breedFilter: 'all',
+  sortKey: 'xphsa',
+  sortDir: 'desc',
+}
+const FILTERS_KEY = 'zoo2.analysis.filters'
+
+function loadFilters(): Filters {
+  try {
+    const s = localStorage.getItem(FILTERS_KEY)
+    if (s) {
+      const f = { ...DEFAULT_FILTERS, ...(JSON.parse(s) as Partial<Filters>) }
+      // Guard against a stored sort column that no longer exists.
+      if (!COLUMNS.some((c) => c.key === f.sortKey)) f.sortKey = DEFAULT_FILTERS.sortKey
+      return f
+    }
+  } catch {
+    // ignore malformed storage
+  }
+  return DEFAULT_FILTERS
+}
 
 interface DisplayRow extends AnimalEntry {
   breedingPossible: boolean
@@ -70,12 +103,37 @@ export function AnalysisTable({
   breedWtp: number
   breedMaxAds: number
 }) {
-  const [search, setSearch] = useState('')
-  const [biome, setBiome] = useState('')
-  const [ownedFilter, setOwnedFilter] = useState<'all' | 'owned' | 'not'>('all')
-  const [breedFilter, setBreedFilter] = useState<'all' | 'yes'>('all')
-  const [sortKey, setSortKey] = useState('xphsa')
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const saved = useMemo(loadFilters, [])
+  const [search, setSearch] = useState(saved.search)
+  const [biome, setBiome] = useState(saved.biome)
+  const [ownedFilter, setOwnedFilter] = useState<'all' | 'owned' | 'not'>(saved.ownedFilter)
+  const [breedFilter, setBreedFilter] = useState<'all' | 'yes'>(saved.breedFilter)
+  const [sortKey, setSortKey] = useState(saved.sortKey)
+  const [sortDir, setSortDir] = useState<SortDir>(saved.sortDir)
+
+  // Persist the filter/sort state across sessions.
+  useEffect(() => {
+    localStorage.setItem(
+      FILTERS_KEY,
+      JSON.stringify({ search, biome, ownedFilter, breedFilter, sortKey, sortDir }),
+    )
+  }, [search, biome, ownedFilter, breedFilter, sortKey, sortDir])
+
+  function resetFilters() {
+    setSearch(DEFAULT_FILTERS.search)
+    setBiome(DEFAULT_FILTERS.biome)
+    setOwnedFilter(DEFAULT_FILTERS.ownedFilter)
+    setBreedFilter(DEFAULT_FILTERS.breedFilter)
+    setSortKey(DEFAULT_FILTERS.sortKey)
+    setSortDir(DEFAULT_FILTERS.sortDir)
+  }
+  const isFiltered =
+    search !== DEFAULT_FILTERS.search ||
+    biome !== DEFAULT_FILTERS.biome ||
+    ownedFilter !== DEFAULT_FILTERS.ownedFilter ||
+    breedFilter !== DEFAULT_FILTERS.breedFilter ||
+    sortKey !== DEFAULT_FILTERS.sortKey ||
+    sortDir !== DEFAULT_FILTERS.sortDir
 
   const rows = useMemo(() => {
     const col = COLUMNS.find((c) => c.key === sortKey)!
@@ -142,6 +200,11 @@ export function AnalysisTable({
           <option value="all">Élevage : tous</option>
           <option value="yes">Élevables</option>
         </select>
+        {isFiltered && (
+          <button className="small" onClick={resetFilters}>
+            Réinitialiser
+          </button>
+        )}
         <span className="count">
           {rows.length} / {entries.length}
         </span>
