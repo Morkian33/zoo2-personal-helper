@@ -83,11 +83,14 @@ export function BreedingPlanner({ entries }: { entries: AnimalEntry[] }) {
       }
     : null
 
-  const activePolicies = POLICIES.filter((p) => allowAds || !p.usesAds)
-  const rows = params ? evaluatePolicies(params, wtp, activePolicies) : []
+  // The table shows every strategy, but the optimal highlight and the slider
+  // thresholds only consider ad strategies when the player accepts ads (otherwise
+  // they'd always be pushed forward).
+  const rows = params ? evaluatePolicies(params, wtp, POLICIES) : []
+  const envelopeRows = rows.filter((r) => allowAds || r.policy.adUntil === 0)
   const { segments, maxThreshold } = useMemo(
-    () => (rows.length ? optimalThresholds(rows) : { segments: [], maxThreshold: 0 }),
-    [rows],
+    () => (envelopeRows.length ? optimalThresholds(envelopeRows) : { segments: [], maxThreshold: 0 }),
+    [envelopeRows],
   )
   // Strategy that is optimal at the current wtp (last segment whose threshold <= wtp).
   const applicable = segments.filter((s) => s.from <= wtp)
