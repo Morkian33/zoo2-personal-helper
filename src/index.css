@@ -514,6 +514,36 @@ button:disabled {
   font-size: 0.85rem;
 }
 
+/* ---------- Column picker ---------- */
+.col-picker {
+  position: relative;
+}
+.col-menu {
+  position: absolute;
+  top: 110%;
+  left: 0;
+  z-index: 6;
+  display: grid;
+  gap: 0.35rem;
+  max-height: 60vh;
+  overflow: auto;
+  padding: 0.6rem 0.8rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+}
+.col-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 0.2rem;
+}
+
 .table-wrap {
   overflow: auto;
   max-height: calc(100vh - 180px);

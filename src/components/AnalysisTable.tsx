@@ -25,6 +25,19 @@ const DEFAULT_FILTERS: Filters = {
   sortDir: 'desc',
 }
 const FILTERS_KEY = 'zoo2.analysis.filters'
+const HIDDEN_COLS_KEY = 'zoo2.analysis.hiddenCols'
+// The Animal name column is always shown (anchor for every row).
+const ALWAYS_ON = 'name'
+
+function loadHiddenCols(): Set<string> {
+  try {
+    const s = localStorage.getItem(HIDDEN_COLS_KEY)
+    if (s) return new Set((JSON.parse(s) as string[]).filter((k) => k !== ALWAYS_ON))
+  } catch {
+    // ignore malformed storage
+  }
+  return new Set()
+}
 
 function loadFilters(): Filters {
   try {
@@ -76,6 +89,8 @@ const COLUMNS: Column[] = [
   { key: 'owned', label: 'Possédé', type: 'num', get: (e) => e.owned_count, format: ownedLabel },
   { key: 'breeding', label: 'Élevable', type: 'num', get: (e) => (e.breedingPossible ? 1 : 0), format: (v) => (v ? '✓' : '—') },
   { key: 'size', label: 'Taille', type: 'num', get: (e) => e.size, format: int },
+  { key: 'nbopt', label: 'Nb optimal', type: 'num', get: (e) => e.metrics.nbOptimal, format: int },
+  { key: 'tiles', label: 'Taille enclos', type: 'num', get: (e) => e.metrics.optimalTiles, format: int },
   { key: 'pop', label: 'Popularité', type: 'num', get: (e) => e.popularity, format: int },
   { key: 'xpday', label: 'XP/jour', type: 'num', get: (e) => e.metrics.sumXpPerDay, format: int },
   { key: 'xphsa', label: 'XP/h /taille aj.', type: 'num', get: (e) => e.metrics.sumXpPerHourPerSizeAdjusted, format: dec2 },
@@ -110,6 +125,22 @@ export function AnalysisTable({
   const [breedFilter, setBreedFilter] = useState<'all' | 'yes'>(saved.breedFilter)
   const [sortKey, setSortKey] = useState(saved.sortKey)
   const [sortDir, setSortDir] = useState<SortDir>(saved.sortDir)
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(loadHiddenCols)
+  const [colMenuOpen, setColMenuOpen] = useState(false)
+
+  useEffect(() => {
+    localStorage.setItem(HIDDEN_COLS_KEY, JSON.stringify([...hiddenCols]))
+  }, [hiddenCols])
+
+  function toggleCol(key: string) {
+    setHiddenCols((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+  const visibleColumns = COLUMNS.filter((c) => c.key === ALWAYS_ON || !hiddenCols.has(c.key))
 
   // Persist the filter/sort state across sessions.
   useEffect(() => {
@@ -205,6 +236,33 @@ export function AnalysisTable({
             Réinitialiser
           </button>
         )}
+        <div className="col-picker">
+          <button className="small" onClick={() => setColMenuOpen((o) => !o)}>
+            Colonnes ▾
+          </button>
+          {colMenuOpen && (
+            <div className="col-menu">
+              <div className="col-menu-head">
+                <span>Colonnes affichées</span>
+                {hiddenCols.size > 0 && (
+                  <button className="link" onClick={() => setHiddenCols(new Set())}>
+                    Tout afficher
+                  </button>
+                )}
+              </div>
+              {COLUMNS.filter((c) => c.key !== ALWAYS_ON).map((c) => (
+                <label key={c.key} className="admin-check">
+                  <input
+                    type="checkbox"
+                    checked={!hiddenCols.has(c.key)}
+                    onChange={() => toggleCol(c.key)}
+                  />
+                  {c.label}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
         <span className="count">
           {rows.length} / {entries.length}
         </span>
@@ -214,7 +272,7 @@ export function AnalysisTable({
         <table>
           <thead>
             <tr>
-              {COLUMNS.map((c) => (
+              {visibleColumns.map((c) => (
                 <th
                   key={c.key}
                   className={`sortable ${c.type === 'num' ? 'num' : ''} ${sortKey === c.key ? 'active' : ''}`}
@@ -230,7 +288,7 @@ export function AnalysisTable({
           <tbody>
             {rows.map((e) => (
               <tr key={e.id} className={e.owned_count > 0 ? 'owned' : ''}>
-                {COLUMNS.map((c) => {
+                {visibleColumns.map((c) => {
                   const v = c.get(e)
                   const text =
                     v == null
