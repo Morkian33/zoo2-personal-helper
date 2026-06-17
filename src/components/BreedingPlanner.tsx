@@ -25,23 +25,41 @@ function fmtHours(h: number): string {
 interface PolicyDef {
   label: string
   policy: FodderPolicy
-  usesAds: boolean
 }
-const POLICIES: PolicyDef[] = [
-  { label: 'Sans fourrage', policy: { coinUntil: 0, adUntil: 0 }, usesAds: false },
-  { label: 'Pièce 1ʳᵉ', policy: { coinUntil: 1, adUntil: 0 }, usesAds: false },
-  { label: 'Pièce 1-2', policy: { coinUntil: 2, adUntil: 0 }, usesAds: false },
-  { label: 'Pièce 1-3', policy: { coinUntil: 3, adUntil: 0 }, usesAds: false },
-  { label: 'Pièce toutes', policy: { coinUntil: 999, adUntil: 0 }, usesAds: false },
-  { label: 'Double 1ʳᵉ', policy: { coinUntil: 1, adUntil: 1 }, usesAds: true },
-  { label: 'Double 1-2', policy: { coinUntil: 2, adUntil: 2 }, usesAds: true },
-  { label: 'Double toutes', policy: { coinUntil: 999, adUntil: 999 }, usesAds: true },
-]
+
+const ALL = 999 // sentinel "on every attempt"
+
+function rangeLabel(k: number): string {
+  return k === ALL ? 'toutes' : k === 1 ? '1ʳᵉ' : `1-${k}`
+}
+function policyLabel(coin: number, ad: number): string {
+  if (coin === 0) return 'Sans fourrage'
+  if (ad === 0) return `Pièce ${rangeLabel(coin)}`
+  if (ad >= coin) return `Double ${rangeLabel(ad)}` // pure double (ad == coin, or both ALL)
+  return `Double ${rangeLabel(ad)} +pièce →${coin === ALL ? 'fin' : coin}` // hybrid
+}
+
+// Full strategy set shown in the table: coin fodder up to K, optionally double
+// (coin+ad) on the first few attempts (hybrid = double early, then coin only).
+function buildPolicies(): PolicyDef[] {
+  const coins = [1, 2, 3, 5, ALL]
+  const ads = [0, 1, 2, ALL]
+  const out: PolicyDef[] = [{ label: 'Sans fourrage', policy: { coinUntil: 0, adUntil: 0 } }]
+  for (const coin of coins) {
+    for (const ad of ads) {
+      if (ad > coin) continue // can't double more attempts than you fodder
+      if (ad === ALL && coin !== ALL) continue // "ad all" only pairs with "coin all"
+      out.push({ label: policyLabel(coin, ad), policy: { coinUntil: coin, adUntil: ad } })
+    }
+  }
+  return out
+}
+const POLICIES = buildPolicies()
 
 // Personal preferences persisted across sessions (not account-specific).
 function loadNum(key: string, def: number): number {
-  const v = Number(localStorage.getItem(key))
-  return Number.isFinite(v) && v > 0 ? v : def
+  const v = localStorage.getItem(key)
+  return v === null || !Number.isFinite(Number(v)) ? def : Number(v)
 }
 
 export function BreedingPlanner({ entries }: { entries: AnimalEntry[] }) {
@@ -57,10 +75,10 @@ export function BreedingPlanner({ entries }: { entries: AnimalEntry[] }) {
   const [id, setId] = useState<number | null>(null)
   const [park, setPark] = useState(false)
   const [wtp, setWtp] = useState(() => loadNum('zoo2.breeding.wtp', 0))
-  const [allowAds, setAllowAds] = useState(() => localStorage.getItem('zoo2.breeding.ads') === '1')
+  const [maxAds, setMaxAds] = useState(() => loadNum('zoo2.breeding.maxAds', ALL))
 
   useEffect(() => localStorage.setItem('zoo2.breeding.wtp', String(wtp)), [wtp])
-  useEffect(() => localStorage.setItem('zoo2.breeding.ads', allowAds ? '1' : '0'), [allowAds])
+  useEffect(() => localStorage.setItem('zoo2.breeding.maxAds', String(maxAds)), [maxAds])
 
   const filtered = breedable.filter((e) =>
     `${e.name_fr ?? ''} ${e.name_en}`.toLowerCase().includes(search.trim().toLowerCase()),
@@ -84,10 +102,10 @@ export function BreedingPlanner({ entries }: { entries: AnimalEntry[] }) {
     : null
 
   // The table shows every strategy, but the optimal highlight and the slider
-  // thresholds only consider ad strategies when the player accepts ads (otherwise
-  // they'd always be pushed forward).
+  // thresholds only consider strategies within the player's per-breeding ad budget
+  // (otherwise heavy-ad strategies would always be pushed forward).
   const rows = params ? evaluatePolicies(params, wtp, POLICIES) : []
-  const envelopeRows = rows.filter((r) => allowAds || r.policy.adUntil === 0)
+  const envelopeRows = rows.filter((r) => r.policy.adUntil <= maxAds)
   const { segments, maxThreshold } = useMemo(
     () => (envelopeRows.length ? optimalThresholds(envelopeRows) : { segments: [], maxThreshold: 0 }),
     [envelopeRows],
@@ -139,51 +157,55 @@ export function BreedingPlanner({ entries }: { entries: AnimalEntry[] }) {
                 Parc à bonus (+{(parkBonus(params.base) * 100).toFixed(0)}% par tentative)
               </label>
               <label className="admin-check">
-                <input
-                  type="checkbox"
-                  checked={allowAds}
-                  onChange={(e) => setAllowAds(e.target.checked)}
-                />
-                J'accepte de regarder des pubs (fourrage double)
+                Pubs max / élevage
+                <select value={maxAds} onChange={(e) => setMaxAds(Number(e.target.value))}>
+                  <option value={0}>aucune</option>
+                  <option value={1}>1</option>
+                  <option value={2}>2</option>
+                  <option value={3}>3</option>
+                  <option value={ALL}>illimité</option>
+                </select>
               </label>
             </div>
 
             <label className="wtp">
-              Combien je suis prêt à payer pour éviter 1 cycle d'élevage (~{fmtHours(params.cycleHours)}) :{' '}
-              <b>{int(wtp)} pièces</b>
-            </label>
-            <div className="wtp-slider">
+              Combien je paie pour éviter 1 cycle d'élevage (~{fmtHours(params.cycleHours)}) :{' '}
               <input
-                type="range"
+                type="number"
                 min={0}
-                max={sliderMax}
-                step={Math.max(1, Math.round(sliderMax / 200))}
-                value={Math.min(wtp, sliderMax)}
-                onChange={(e) => setWtp(Number(e.target.value))}
+                step={50}
+                value={wtp}
+                onChange={(e) => setWtp(Math.max(0, Number(e.target.value) || 0))}
               />
-              <div className="ticks">
-                {segments
-                  .filter((s) => s.from > 0 && s.from <= sliderMax)
-                  .map((s) => (
-                    <div
-                      key={s.label}
-                      className="tick"
-                      style={{ left: `${(s.from / sliderMax) * 100}%` }}
-                      title={`${s.label} dès ${int(s.from)} pièces`}
-                    >
-                      <span className="tick-mark" />
-                      <span className="tick-label">
-                        {int(s.from)}
-                        <br />
-                        {s.label}
-                      </span>
-                    </div>
-                  ))}
-              </div>
+              pièces
+            </label>
+            <div className="wtp-track">
+              <div
+                className="wtp-cursor"
+                style={{ left: `${Math.min(100, (wtp / sliderMax) * 100)}%` }}
+                title={`Ta valeur : ${int(wtp)} pièces`}
+              />
+              {segments
+                .filter((s) => s.from > 0 && s.from <= sliderMax)
+                .map((s) => (
+                  <div
+                    key={s.label}
+                    className="tick"
+                    style={{ left: `${(s.from / sliderMax) * 100}%` }}
+                    title={`${s.label} dès ${int(s.from)} pièces`}
+                  >
+                    <span className="tick-mark" />
+                    <span className="tick-label">
+                      {int(s.from)}
+                      <br />
+                      {s.label}
+                    </span>
+                  </div>
+                ))}
             </div>
             <p className="muted">
-              Optimal à {int(wtp)} pièces/cycle : <b>{optimalLabel}</b>. Les repères sur la réglette
-              indiquent à partir de quelle valorisation chaque stratégie devient la meilleure.
+              Optimal à {int(wtp)} pièces/cycle : <b>{optimalLabel}</b>. Les repères indiquent à partir de
+              quelle valorisation chaque stratégie devient la meilleure (dans la limite de pubs choisie).
             </p>
           </div>
 
