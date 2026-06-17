@@ -112,6 +112,8 @@ export function AnalysisTable({
   biomeLabels,
   breedWtp,
   breedMaxAds,
+  disabled,
+  onToggleFavorite,
 }: {
   entries: AnimalEntry[]
   shelters: ShelterLevels
@@ -119,6 +121,8 @@ export function AnalysisTable({
   biomeLabels: BiomeLabels
   breedWtp: number
   breedMaxAds: number
+  disabled: boolean
+  onToggleFavorite: (e: AnimalEntry) => void
 }) {
   const saved = useMemo(loadFilters, [])
   const [search, setSearch] = useState(saved.search)
@@ -285,6 +289,7 @@ export function AnalysisTable({
         <table>
           <thead>
             <tr>
+              <th className="center" title="Favori">★</th>
               {visibleColumns.map((c) => (
                 <th
                   key={c.key}
@@ -301,6 +306,16 @@ export function AnalysisTable({
           <tbody>
             {rows.map((e) => (
               <tr key={e.id} className={e.owned_count > 0 ? 'owned' : ''}>
+                <td className="center">
+                  <button
+                    className={`star ${e.favorite ? 'on' : ''}`}
+                    disabled={disabled}
+                    title={e.favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                    onClick={() => onToggleFavorite(e)}
+                  >
+                    {e.favorite ? '★' : '☆'}
+                  </button>
+                </td>
                 {visibleColumns.map((c) => {
                   const v = c.get(e)
                   const text =

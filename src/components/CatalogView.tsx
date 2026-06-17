@@ -217,6 +217,8 @@ export function CatalogView({ userId }: { userId: string | null }) {
           biomeLabels={biomeLabels}
           breedWtp={breedWtp}
           breedMaxAds={breedMaxAds}
+          disabled={!userId}
+          onToggleFavorite={toggleFavorite}
         />
       )}
 
