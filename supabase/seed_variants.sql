@@ -102,8 +102,8 @@ join (values
   ('Flamingo','White','Blanc'),
   ('Flamingo','Black','Noir'),
   ('Horse','Black','Noir'),
-  ('Horse','pinto','pinto'),
-  ('Horse','pommelé','pommelé'),
+  ('Horse','Pinto','Pinto'),
+  ('Horse','Dapple-Gray','Pommelé'),
   ('Red Kangaroo','White','Blanc'),
   ('Domestic Pig','Brown','Brun')
 ) as v(base_en, coat_name, coat_name_fr) on a.name_en = v.base_en
