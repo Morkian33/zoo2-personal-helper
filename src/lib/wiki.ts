@@ -27,6 +27,18 @@ function cleanLinks(s: string): string {
     .trim()
 }
 
+// Coat names on the wiki sometimes carry HTML markup and a "(formerly X)" note
+// (e.g. "Brown<br><small>(formely Summer)</small>"). Strip those so the coat
+// name matches its clean form and the sync doesn't create a duplicate variant.
+function cleanCoatName(s: string): string {
+  return s
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\s*\((?:formerly|formely)[^)]*\)/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export function wikiTitleFromUrl(url: string): string | null {
   try {
     const u = new URL(url.trim())
@@ -293,7 +305,7 @@ export function parseWikitext(wt: string, knownBiomes: string[] = []): WikiResul
   // Variants are {{Coat_Box}} entries on the same page.
   const variants: WikiVariant[] = parseAllTemplates(wt, 'Coat_Box')
     .map((cb) => ({
-      coat_name: (cb.row1 ?? '').trim(),
+      coat_name: cleanCoatName(cb.row1 ?? ''),
       obtained_from: cb.obtained_from ? cleanLinks(cb.obtained_from) || null : null,
       release_date: wikiDate(cb.release_date),
     }))
