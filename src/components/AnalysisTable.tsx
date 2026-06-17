@@ -3,7 +3,7 @@ import { canBreed } from '../lib/catalog'
 import { int, dec2, signed, ownedLabel, norm } from '../lib/format'
 import { biomeLabel } from '../lib/labels'
 import { parseHours } from '../lib/duration'
-import { BONUS_BIOMES, COOLDOWN_HOURS, bestPolicyLabel } from '../lib/breedingPlan'
+import { COOLDOWN_HOURS, bestPolicyLabel } from '../lib/breedingPlan'
 import type { AnimalEntry, ShelterLevels, BiomeLabels } from '../lib/types'
 
 type SortDir = 'asc' | 'desc'
@@ -13,8 +13,8 @@ interface DisplayRow extends AnimalEntry {
   breedReco: string | null
 }
 
-// Recommended fodder strategy for an animal at the player's current valuation,
-// assuming it's bred in its bonus park when one exists.
+// Recommended fodder strategy for an animal at the player's current valuation.
+// Baseline for now: no bonus-park assumption.
 function breedRecoFor(e: AnimalEntry, wtp: number, maxAds: number): string | null {
   if (e.breed_proba == null || e.breed_proba <= 0 || e.breed_cost == null) return null
   return bestPolicyLabel(
@@ -22,7 +22,7 @@ function breedRecoFor(e: AnimalEntry, wtp: number, maxAds: number): string | nul
       base: e.breed_proba,
       cost: e.breed_cost,
       cycleHours: (parseHours(e.breed_duration) ?? 0) + COOLDOWN_HOURS,
-      park: e.biome != null && BONUS_BIOMES.has(e.biome),
+      park: false,
     },
     wtp,
     maxAds,
