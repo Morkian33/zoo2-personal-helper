@@ -1,11 +1,31 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { canBreed, hasBreedingShelter } from '../lib/catalog'
 import { norm } from '../lib/format'
 import type { AnimalEntry, ShelterLevels } from '../lib/types'
 import type { CollectionRow, CollectionRequirementRow } from '../lib/collections'
 
-type Filter = 'all' | 'incomplete' | 'reachable'
+type Filter = 'all' | 'reachable'
 type Status = 'complete' | 'reachable' | 'blocked'
+
+// One recommended action toward completing collections.
+interface Rec {
+  key: string
+  label: string
+  your: number | null
+  need: number
+  cols: number // how many collections this advances
+  completes: number // how many it would outright complete
+  score: number
+  owned: boolean
+}
+
+const HIDE_DONE_KEY = 'zoo2.collections.hideDone'
+
+// Short "why recommended" note: how many collections this advances/completes.
+function recoWhy(r: Rec): string {
+  const cols = `${r.cols} collection${r.cols > 1 ? 's' : ''}`
+  return r.completes > 0 ? `${cols} (en complète ${r.completes})` : cols
+}
 
 export function CollectionsView({
   entries,
@@ -27,6 +47,8 @@ export function CollectionsView({
   const [sector, setSector] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
+  const [hideComplete, setHideComplete] = useState(() => localStorage.getItem(HIDE_DONE_KEY) === '1')
+  useEffect(() => localStorage.setItem(HIDE_DONE_KEY, hideComplete ? '1' : '0'), [hideComplete])
 
   const { animalById, variantMax, reqsByCol } = useMemo(() => {
     const animalById = new Map(entries.map((e) => [e.id, e]))
@@ -82,12 +104,59 @@ export function CollectionsView({
     }
   }
 
+  // Recommendations: rank the animals/coats whose progress unlocks the most
+  // collection advancement. Each unmet requirement contributes 1/missing to its
+  // target, so the last missing piece of a collection weighs a full point and
+  // items needed by several near-complete collections rise to the top.
+  const { levelUp, unlock } = useMemo(() => {
+    const acc = new Map<string, Rec>()
+    for (const c of collections) {
+      const reqs = reqsByCol.get(c.id) ?? []
+      const unmet = reqs.filter((r) => !reqInfo(r).met)
+      const missing = unmet.length
+      if (missing === 0) continue
+      const w = 1 / missing
+      for (const r of unmet) {
+        const info = reqInfo(r)
+        const key = r.variant_id != null ? `v${r.variant_id}` : `a${r.animal_id}`
+        let e = acc.get(key)
+        if (!e) {
+          e = {
+            key,
+            label: info.label,
+            your: info.your,
+            need: r.required_level,
+            cols: 0,
+            completes: 0,
+            score: 0,
+            owned: info.obtainable,
+          }
+          acc.set(key, e)
+        }
+        e.cols++
+        e.need = Math.max(e.need, r.required_level)
+        if (missing === 1) e.completes++
+        e.score += w
+      }
+    }
+    const cmp = (a: Rec, b: Rec) =>
+      b.score - a.score || b.completes - a.completes || b.cols - a.cols
+    const arr = [...acc.values()]
+    return {
+      levelUp: arr.filter((e) => e.owned).sort(cmp).slice(0, 5),
+      unlock: arr.filter((e) => !e.owned).sort(cmp).slice(0, 5),
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collections, reqsByCol, animalById, variantMax])
+
   const sectors = useMemo(
     () => [...new Set(collections.map((c) => c.sector).filter(Boolean))] as string[],
     [collections],
   )
 
-  const rows = useMemo(() => {
+  // Scored collections (sector/search applied) — counts are derived from this,
+  // independent of the complete/reachable visibility toggles.
+  const scored = useMemo(() => {
     const q = norm(search.trim())
     return collections
       .filter((c) => (!sector || c.sector === sector) && (!q || norm(c.name).includes(q)))
@@ -108,16 +177,17 @@ export function CollectionsView({
               : 'blocked'
         return { col: c, reqs, met, total: reqs.length, status }
       })
-      .filter((x) => {
-        if (filter === 'incomplete') return x.status !== 'complete'
-        if (filter === 'reachable') return x.status === 'reachable'
-        return true
-      })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [collections, reqsByCol, sector, search, filter, animalById, variantMax, shelters])
+  }, [collections, reqsByCol, sector, search, animalById, variantMax, shelters])
 
-  const completeCount = rows.filter((r) => r.status === 'complete').length
-  const reachableCount = rows.filter((r) => r.status === 'reachable').length
+  const rows = scored.filter((x) => {
+    if (hideComplete && x.status === 'complete') return false
+    if (filter === 'reachable') return x.status === 'reachable'
+    return true
+  })
+
+  const completeCount = scored.filter((r) => r.status === 'complete').length
+  const reachableCount = scored.filter((r) => r.status === 'reachable').length
 
   if (collections.length === 0) {
     return (
@@ -146,13 +216,60 @@ export function CollectionsView({
         </select>
         <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}>
           <option value="all">Toutes</option>
-          <option value="incomplete">Masquer les complètes</option>
           <option value="reachable">À ta portée (tout élevable)</option>
         </select>
+        <button
+          className={`fav-toggle small ${hideComplete ? 'active' : ''}`}
+          onClick={() => setHideComplete((v) => !v)}
+          title="Masquer les collections terminées"
+        >
+          ✓ Masquer les terminées
+        </button>
         <span className="count">
           {completeCount} complètes · {reachableCount} à ta portée
         </span>
       </div>
+
+      {(levelUp.length > 0 || unlock.length > 0) && (
+        <details className="reco" open>
+          <summary>Recommandations pour avancer les collections</summary>
+          <div className="reco-grid">
+            <div className="reco-card">
+              <h3>⬆ Faire monter de niveau</h3>
+              {levelUp.length === 0 ? (
+                <p className="muted">Rien à monter pour l'instant.</p>
+              ) : (
+                <ol>
+                  {levelUp.map((r) => (
+                    <li key={r.key}>
+                      <span className="reco-name">{r.label}</span>
+                      <span className="muted">
+                        {' '}
+                        niv. {r.your ?? 0} → {r.need} · {recoWhy(r)}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+            <div className="reco-card">
+              <h3>🔓 Débloquer en priorité</h3>
+              {unlock.length === 0 ? (
+                <p className="muted">Rien à débloquer.</p>
+              ) : (
+                <ol>
+                  {unlock.map((r) => (
+                    <li key={r.key}>
+                      <span className="reco-name">{r.label}</span>
+                      <span className="muted"> {recoWhy(r)}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          </div>
+        </details>
+      )}
 
       <div className="coll-list">
         {rows.map(({ col, reqs, met, total, status }) => (
