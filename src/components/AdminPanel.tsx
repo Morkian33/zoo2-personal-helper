@@ -86,7 +86,7 @@ export function AdminPanel({
   const [scrapedVariants, setScrapedVariants] = useState<WikiVariant[]>([])
 
   const knownBiomes = useMemo(
-    () => [...new Set(entries.map((e) => e.biome).filter(Boolean))] as string[],
+    () => ([...new Set(entries.map((e) => e.biome).filter(Boolean))] as string[]).sort(),
     [entries],
   )
 
@@ -277,6 +277,29 @@ export function AdminPanel({
                   onChange={(e) => setForm((f) => ({ ...f, [fl.key]: e.target.checked }))}
                 />
                 {fl.label}
+                {diff && (
+                  <span className="diff">
+                    {diff.from || '∅'} → {diff.to || '∅'}
+                  </span>
+                )}
+              </label>
+            ) : fl.key === 'biome' ? (
+              <label key={fl.key} className={diff ? 'changed' : undefined}>
+                {fl.label}
+                <select
+                  value={form.biome as string}
+                  onChange={(e) => setForm((f) => ({ ...f, biome: e.target.value }))}
+                >
+                  <option value="">—</option>
+                  {(knownBiomes.includes(form.biome as string) || !form.biome
+                    ? knownBiomes
+                    : [...knownBiomes, form.biome as string]
+                  ).map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
                 {diff && (
                   <span className="diff">
                     {diff.from || '∅'} → {diff.to || '∅'}
