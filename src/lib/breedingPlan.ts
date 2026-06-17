@@ -89,8 +89,9 @@ export function optimalThresholds(rows: PolicyRow[]): {
     }
   }
   breaks.sort((a, b) => a - b)
-  const maxThreshold = breaks.length ? breaks[breaks.length - 1] : 0
-  const sentinel = maxThreshold + Math.max(1, maxThreshold * 0.25)
+  // Probe just past the largest pairwise crossing to capture the final segment.
+  const maxBreak = breaks.length ? breaks[breaks.length - 1] : 0
+  const sentinel = maxBreak + Math.max(1, maxBreak * 0.25)
   const lo = [0, ...breaks]
   const argmaxAt = (w: number) => {
     let best = lines[0]
@@ -112,6 +113,9 @@ export function optimalThresholds(rows: PolicyRow[]): {
       segments.push({ from: lo[k], label })
     }
   }
+  // Real last threshold = last actual envelope switch, not the largest (possibly
+  // spurious) crossing between near-parallel lines.
+  const maxThreshold = segments.length > 1 ? segments[segments.length - 1].from : 0
   return { segments, maxThreshold }
 }
 
