@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { canBreed } from '../lib/catalog'
+import { canBreed, hasBreedingShelter } from '../lib/catalog'
 import { norm } from '../lib/format'
 import type { AnimalEntry, ShelterLevels } from '../lib/types'
 import type { CollectionRow, CollectionRequirementRow } from '../lib/collections'
@@ -30,11 +30,15 @@ export function CollectionsView({
 
   const { animalById, variantMax, reqsByCol } = useMemo(() => {
     const animalById = new Map(entries.map((e) => [e.id, e]))
-    const variantMax = new Map<number, { label: string; max: number | null }>()
+    const variantMax = new Map<number, { label: string; max: number | null; owned: boolean }>()
     for (const e of entries) {
       const base = e.name_fr ?? e.name_en
       for (const v of e.variants) {
-        variantMax.set(v.id, { label: `${base} (${v.coat_name_fr ?? v.coat_name})`, max: v.max_level })
+        variantMax.set(v.id, {
+          label: `${base} (${v.coat_name_fr ?? v.coat_name})`,
+          max: v.max_level,
+          owned: v.owned,
+        })
       }
     }
     const reqsByCol = new Map<number, CollectionRequirementRow[]>()
@@ -53,20 +57,28 @@ export function CollectionsView({
     your: number | null
     met: boolean
     breedable: boolean
+    obtainable: boolean
   } {
     const a = animalById.get(r.animal_id)
-    const breedable = a ? canBreed(a, shelters) : false
     if (r.variant_id != null) {
       const v = variantMax.get(r.variant_id)
       const your = v?.max ?? null
-      return { label: v?.label ?? '(variant ?)', your, met: your != null && your >= r.required_level, breedable }
+      const met = your != null && your >= r.required_level
+      // A variant you don't own can't be produced by breeding the base species —
+      // it must be obtained first (event/quest). Only count it as workable once
+      // you own it (then you can breed it up to the required level).
+      const obtainable = !!v?.owned
+      const breedable = obtainable && (a ? hasBreedingShelter(a, shelters) : false)
+      return { label: v?.label ?? '(variant ?)', your, met, breedable, obtainable }
     }
+    const breedable = a ? canBreed(a, shelters) : false
     const your = a?.max_level ?? null
     return {
       label: a ? (a.name_fr ?? a.name_en) : '(animal ?)',
       your,
       met: your != null && your >= r.required_level,
       breedable,
+      obtainable: !!a && a.owned_count > 0,
     }
   }
 
@@ -155,7 +167,7 @@ export function CollectionsView({
             </summary>
             <div className="coll-reqs">
               {reqs.map((r, i) => {
-                const { label, your, met: ok, breedable } = reqInfo(r)
+                const { label, your, met: ok, breedable, obtainable } = reqInfo(r)
                 const kind = r.variant_id != null ? 'variant' : 'animal'
                 const id = r.variant_id ?? r.animal_id
                 return (
@@ -164,7 +176,7 @@ export function CollectionsView({
                     <span>{label}</span>
                     <span className="muted req-need">
                       Lv {r.required_level}
-                      {!ok && !breedable ? ' · non élevable' : ''}
+                      {!ok && !breedable ? (obtainable ? ' · non élevable' : ' · à obtenir') : ''}
                     </span>
                     <input
                       className="lvl"

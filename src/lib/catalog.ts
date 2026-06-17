@@ -92,16 +92,23 @@ export async function loadCatalog(): Promise<CatalogData> {
   }
 }
 
-// True when the animal can be bred: at least 2 owned (any coats of the species) AND an
-// owned biome shelter whose level is >= the animal's required shelter level.
-export function canBreed(entry: AnimalEntry, shelters: ShelterLevels): boolean {
-  if (entry.owned_count < 2) return false
+// Whether the player owns a shelter able to host this animal's breeding (right
+// biome, sufficient level). Independent of how many copies are owned, so it
+// also applies to a variant (which shares its base animal's biome/shelter).
+export function hasBreedingShelter(entry: AnimalEntry, shelters: ShelterLevels): boolean {
   if (entry.shelter_lvl == null || entry.biome == null) return false
   const sb = shelterBiome(entry.biome)
   if (sb == null) return false
   const level = shelters.get(sb)
   if (level == null) return false // shelter not owned
   return level >= entry.shelter_lvl
+}
+
+// True when the animal can be bred: at least 2 owned (any coats of the species) AND an
+// owned biome shelter whose level is >= the animal's required shelter level.
+export function canBreed(entry: AnimalEntry, shelters: ShelterLevels): boolean {
+  if (entry.owned_count < 2) return false
+  return hasBreedingShelter(entry, shelters)
 }
 
 // Upserts the current user's personal state for an animal.
