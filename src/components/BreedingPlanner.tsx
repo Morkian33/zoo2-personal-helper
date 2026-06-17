@@ -1,19 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { parseHours } from '../lib/duration'
 import {
+  ALL,
+  AD_BUDGETS,
+  BONUS_BIOMES,
+  COOLDOWN_HOURS,
+  buildPolicies,
   evaluatePolicies,
   optimalThresholds,
   parkBonus,
   type BreedParams,
-  type FodderPolicy,
 } from '../lib/breedingPlan'
 import { int, norm } from '../lib/format'
 import type { AnimalEntry } from '../lib/types'
-
-// Biomes that have a dedicated breeding park granting the +50% proba/XP bonus.
-const BONUS_BIOMES = new Set(['Forest', 'Ice', 'Plains', 'Savanna', 'Jungle', 'Water'])
-
-const COOLDOWN_HOURS = 8 // a pair must wait 8h after a breeding before breeding again
 
 function fmtHours(h: number): string {
   if (h < 24) return `${h.toFixed(0)}h`
@@ -22,57 +21,21 @@ function fmtHours(h: number): string {
   return r ? `${d}j ${r}h` : `${d}j`
 }
 
-interface PolicyDef {
-  label: string
-  policy: FodderPolicy
-}
-
-const ALL = 999 // sentinel "on every attempt"
-
-function rangeLabel(k: number): string {
-  return k === ALL ? 'toutes' : k === 1 ? '1ʳᵉ' : `1-${k}`
-}
-function policyLabel(coin: number, ad: number): string {
-  if (coin === 0) return 'Sans fourrage'
-  if (ad === 0) return `Pièce ${rangeLabel(coin)}`
-  if (ad >= coin) return `Double ${rangeLabel(ad)}` // pure double (ad == coin, or both ALL)
-  return `Double ${rangeLabel(ad)} +pièce →${coin === ALL ? 'fin' : coin}` // hybrid
-}
-
-const AD_BUDGETS = [0, 1, 2, ALL] // options for "max ads per breeding"
-
-// Full strategy set shown in the table: coin fodder up to K, optionally double
-// (coin+ad) on the first few attempts (hybrid = double early, then coin only).
-// Sorted by type: coin-only, then pure double, then hybrids.
-function buildPolicies(): PolicyDef[] {
-  const coins = [1, 2, 3, ALL]
-  const combos: { coin: number; ad: number }[] = []
-  for (const coin of coins) {
-    for (const ad of AD_BUDGETS) {
-      if (ad > coin) continue // can't double more attempts than you fodder
-      if (ad === ALL && coin !== ALL) continue // "ad all" only pairs with "coin all"
-      combos.push({ coin, ad })
-    }
-  }
-  const type = ({ coin, ad }: { coin: number; ad: number }) => (ad === 0 ? 1 : ad >= coin ? 2 : 3)
-  combos.sort((a, b) => type(a) - type(b) || a.coin - b.coin || a.ad - b.ad)
-  return [
-    { label: 'Sans fourrage', policy: { coinUntil: 0, adUntil: 0 } },
-    ...combos.map((c) => ({
-      label: policyLabel(c.coin, c.ad),
-      policy: { coinUntil: c.coin, adUntil: c.ad },
-    })),
-  ]
-}
 const POLICIES = buildPolicies()
 
-// Personal preferences persisted across sessions (not account-specific).
-function loadNum(key: string, def: number): number {
-  const v = localStorage.getItem(key)
-  return v === null || !Number.isFinite(Number(v)) ? def : Number(v)
-}
-
-export function BreedingPlanner({ entries }: { entries: AnimalEntry[] }) {
+export function BreedingPlanner({
+  entries,
+  wtp,
+  setWtp,
+  maxAds,
+  setMaxAds,
+}: {
+  entries: AnimalEntry[]
+  wtp: number
+  setWtp: (n: number) => void
+  maxAds: number
+  setMaxAds: (n: number) => void
+}) {
   const breedable = useMemo(
     () =>
       entries
@@ -84,11 +47,6 @@ export function BreedingPlanner({ entries }: { entries: AnimalEntry[] }) {
   const [search, setSearch] = useState('')
   const [id, setId] = useState<number | null>(null)
   const [park, setPark] = useState(false)
-  const [wtp, setWtp] = useState(() => loadNum('zoo2.breeding.wtp', 0))
-  const [maxAds, setMaxAds] = useState(() => loadNum('zoo2.breeding.maxAds', ALL))
-
-  useEffect(() => localStorage.setItem('zoo2.breeding.wtp', String(wtp)), [wtp])
-  useEffect(() => localStorage.setItem('zoo2.breeding.maxAds', String(maxAds)), [maxAds])
 
   const filtered = breedable.filter((e) =>
     norm(`${e.name_fr ?? ''} ${e.name_en}`).includes(norm(search.trim())),
@@ -127,6 +85,33 @@ export function BreedingPlanner({ entries }: { entries: AnimalEntry[] }) {
 
   return (
     <div className="planner">
+      <div className="planner-global">
+        <label className="wtp">
+          Combien je paie pour éviter 1 cycle d'élevage :{' '}
+          <input
+            type="number"
+            min={0}
+            step={50}
+            value={wtp}
+            onChange={(e) => setWtp(Math.max(0, Number(e.target.value) || 0))}
+          />
+          pièces
+        </label>
+        <label className="admin-check">
+          Pubs max / élevage
+          <select
+            value={AD_BUDGETS.includes(maxAds) ? maxAds : ALL}
+            onChange={(e) => setMaxAds(Number(e.target.value))}
+          >
+            <option value={0}>aucune</option>
+            <option value={1}>1</option>
+            <option value={2}>2</option>
+            <option value={ALL}>illimité</option>
+          </select>
+        </label>
+        <span className="muted">Réglage global, appliqué aussi à la colonne « Élevage reco » de l'Analyse.</span>
+      </div>
+
       <div className="admin-search">
         <input
           type="search"
@@ -161,35 +146,9 @@ export function BreedingPlanner({ entries }: { entries: AnimalEntry[] }) {
               {(Math.min(params.base, 0.1) * 100).toFixed(0)}/échec · lancement {int(params.cost)} pièces ·
               cycle {fmtHours(params.cycleHours)} (élevage + 8h)
             </span>
-            <div className="planner-opts">
-              <label className="admin-check">
-                <input type="checkbox" checked={park} onChange={(e) => setPark(e.target.checked)} />
-                Parc à bonus (+{(parkBonus(params.base) * 100).toFixed(0)}% par tentative)
-              </label>
-              <label className="admin-check">
-                Pubs max / élevage
-                <select
-                  value={AD_BUDGETS.includes(maxAds) ? maxAds : ALL}
-                  onChange={(e) => setMaxAds(Number(e.target.value))}
-                >
-                  <option value={0}>aucune</option>
-                  <option value={1}>1</option>
-                  <option value={2}>2</option>
-                  <option value={ALL}>illimité</option>
-                </select>
-              </label>
-            </div>
-
-            <label className="wtp">
-              Combien je paie pour éviter 1 cycle d'élevage (~{fmtHours(params.cycleHours)}) :{' '}
-              <input
-                type="number"
-                min={0}
-                step={50}
-                value={wtp}
-                onChange={(e) => setWtp(Math.max(0, Number(e.target.value) || 0))}
-              />
-              pièces
+            <label className="admin-check">
+              <input type="checkbox" checked={park} onChange={(e) => setPark(e.target.checked)} />
+              Parc à bonus (+{(parkBonus(params.base) * 100).toFixed(0)}% par tentative)
             </label>
             <div className="wtp-track">
               <div

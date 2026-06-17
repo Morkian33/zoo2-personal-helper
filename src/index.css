@@ -397,6 +397,16 @@ button:disabled {
   flex-wrap: wrap;
   gap: 1rem;
 }
+.planner-global {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem 0.9rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
 .wtp {
   width: fit-content;
   color: var(--text);

@@ -4,6 +4,7 @@ import { loadCatalog, setUserAnimal, setUserShelter, setUserVariant } from '../l
 import { shelterBiome } from '../lib/biome'
 import type { AnimalEntry, ShelterLevels, VariantEntry, BiomeLabels } from '../lib/types'
 import type { CollectionRow, CollectionRequirementRow } from '../lib/collections'
+import { ALL } from '../lib/breedingPlan'
 import { CollectionsView } from './CollectionsView'
 import { BreedingPlanner } from './BreedingPlanner'
 import { SheltersPanel } from './SheltersPanel'
@@ -31,6 +32,19 @@ export function CatalogView({ userId }: { userId: string | null }) {
   const [tab, setTab] = useState<Tab>('analysis')
   const [adminTab, setAdminTab] = useState<AdminTab>('sync')
   const [editRequest, setEditRequest] = useState<{ id: number; nonce: number } | null>(null)
+
+  // Breeding preferences: shared between the Élevage tab and the Analyse "Élevage
+  // reco" column, persisted across sessions (not account-specific).
+  const [breedWtp, setBreedWtp] = useState(() => {
+    const v = Number(localStorage.getItem('zoo2.breeding.wtp'))
+    return Number.isFinite(v) && v > 0 ? v : 0
+  })
+  const [breedMaxAds, setBreedMaxAds] = useState(() => {
+    const v = localStorage.getItem('zoo2.breeding.maxAds')
+    return v !== null && Number.isFinite(Number(v)) ? Number(v) : ALL
+  })
+  useEffect(() => localStorage.setItem('zoo2.breeding.wtp', String(breedWtp)), [breedWtp])
+  useEffect(() => localStorage.setItem('zoo2.breeding.maxAds', String(breedMaxAds)), [breedMaxAds])
 
   // From the FR-labels tab: jump to the Animaux tab with this animal loaded.
   function editAnimal(id: number) {
@@ -185,7 +199,14 @@ export function CatalogView({ userId }: { userId: string | null }) {
       </nav>
 
       {tab === 'analysis' && (
-        <AnalysisTable entries={entries} shelters={shelters} biomes={biomes} biomeLabels={biomeLabels} />
+        <AnalysisTable
+          entries={entries}
+          shelters={shelters}
+          biomes={biomes}
+          biomeLabels={biomeLabels}
+          breedWtp={breedWtp}
+          breedMaxAds={breedMaxAds}
+        />
       )}
 
       {tab === 'zoo' && (
@@ -231,7 +252,15 @@ export function CatalogView({ userId }: { userId: string | null }) {
         />
       )}
 
-      {tab === 'breeding' && <BreedingPlanner entries={entries} />}
+      {tab === 'breeding' && (
+        <BreedingPlanner
+          entries={entries}
+          wtp={breedWtp}
+          setWtp={setBreedWtp}
+          maxAds={breedMaxAds}
+          setMaxAds={setBreedMaxAds}
+        />
+      )}
 
       {tab === 'admin' && isAdmin && (
         <div className="admin-tab">

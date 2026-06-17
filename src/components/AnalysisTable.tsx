@@ -2,12 +2,31 @@ import { useMemo, useState } from 'react'
 import { canBreed } from '../lib/catalog'
 import { int, dec2, signed, ownedLabel, norm } from '../lib/format'
 import { biomeLabel } from '../lib/labels'
+import { parseHours } from '../lib/duration'
+import { BONUS_BIOMES, COOLDOWN_HOURS, bestPolicyLabel } from '../lib/breedingPlan'
 import type { AnimalEntry, ShelterLevels, BiomeLabels } from '../lib/types'
 
 type SortDir = 'asc' | 'desc'
 
 interface DisplayRow extends AnimalEntry {
   breedingPossible: boolean
+  breedReco: string | null
+}
+
+// Recommended fodder strategy for an animal at the player's current valuation,
+// assuming it's bred in its bonus park when one exists.
+function breedRecoFor(e: AnimalEntry, wtp: number, maxAds: number): string | null {
+  if (e.breed_proba == null || e.breed_proba <= 0 || e.breed_cost == null) return null
+  return bestPolicyLabel(
+    {
+      base: e.breed_proba,
+      cost: e.breed_cost,
+      cycleHours: (parseHours(e.breed_duration) ?? 0) + COOLDOWN_HOURS,
+      park: e.biome != null && BONUS_BIOMES.has(e.biome),
+    },
+    wtp,
+    maxAds,
+  )
 }
 
 interface Column {
@@ -33,6 +52,7 @@ const COLUMNS: Column[] = [
   { key: 'newborn', label: 'Coût nouveau-né', type: 'num', get: (e) => e.metrics.newbornCost, format: int },
   { key: 'bdelta', label: 'Δ élevage', type: 'num', get: (e) => e.metrics.breedingDelta, format: signed },
   { key: 'sell20', label: 'Δ revente lvl20', type: 'num', get: (e) => e.metrics.sellDeltaLvl20, format: signed },
+  { key: 'breedReco', label: 'Élevage reco', type: 'text', get: (e) => e.breedReco },
 ]
 
 export function AnalysisTable({
@@ -40,11 +60,15 @@ export function AnalysisTable({
   shelters,
   biomes,
   biomeLabels,
+  breedWtp,
+  breedMaxAds,
 }: {
   entries: AnimalEntry[]
   shelters: ShelterLevels
   biomes: string[]
   biomeLabels: BiomeLabels
+  breedWtp: number
+  breedMaxAds: number
 }) {
   const [search, setSearch] = useState('')
   const [biome, setBiome] = useState('')
@@ -57,7 +81,11 @@ export function AnalysisTable({
     const col = COLUMNS.find((c) => c.key === sortKey)!
     const q = norm(search.trim())
     const display: DisplayRow[] = entries
-      .map((e) => ({ ...e, breedingPossible: canBreed(e, shelters) }))
+      .map((e) => ({
+        ...e,
+        breedingPossible: canBreed(e, shelters),
+        breedReco: breedRecoFor(e, breedWtp, breedMaxAds),
+      }))
       .filter((e) => {
         if (biome && e.biome !== biome) return false
         if (ownedFilter === 'owned' && e.owned_count === 0) return false
@@ -78,7 +106,7 @@ export function AnalysisTable({
       }
       return (va - vb) * dir
     })
-  }, [entries, shelters, search, biome, ownedFilter, breedFilter, sortKey, sortDir])
+  }, [entries, shelters, search, biome, ownedFilter, breedFilter, sortKey, sortDir, breedWtp, breedMaxAds])
 
   function toggleSort(key: string) {
     if (key === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))

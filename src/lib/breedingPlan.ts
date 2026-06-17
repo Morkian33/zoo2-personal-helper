@@ -21,6 +21,13 @@ export interface FodderPolicy {
   adUntil: number // apply 1 ad fodder on attempts 1..adUntil
 }
 
+export const ALL = 999 // sentinel "on every attempt"
+export const COOLDOWN_HOURS = 8 // a pair waits 8h after a breeding before breeding again
+export const AD_BUDGETS = [0, 1, 2, ALL] // options for "max ads per breeding"
+
+// Biomes that have a dedicated breeding park granting the +50% proba/XP bonus.
+export const BONUS_BIOMES = new Set(['Forest', 'Ice', 'Plains', 'Savanna', 'Jungle', 'Water'])
+
 export interface CampaignResult {
   attempts: number
   coins: number // expected coins spent (launches + coin fodder)
@@ -53,6 +60,56 @@ export function simulate(p: BreedParams, policy: FodderPolicy): CampaignResult {
     surv *= 1 - q
   }
   return { attempts, coins: coinUnits * p.cost, ads, hours: attempts * p.cycleHours }
+}
+
+export interface PolicyDef {
+  label: string
+  policy: FodderPolicy
+}
+
+function rangeLabel(k: number): string {
+  return k === ALL ? 'toutes' : k === 1 ? '1ʳᵉ' : `1-${k}`
+}
+function policyLabel(coin: number, ad: number): string {
+  if (coin === 0) return 'Sans fourrage'
+  if (ad === 0) return `Pièce ${rangeLabel(coin)}`
+  if (ad >= coin) return `Double ${rangeLabel(ad)}` // pure double (ad == coin, or both ALL)
+  return `Double ${rangeLabel(ad)} +pièce →${coin === ALL ? 'fin' : coin}` // hybrid
+}
+
+// Full strategy set shown in the table: coin fodder up to K, optionally double
+// (coin+ad) on the first few attempts (hybrid = double early, then coin only).
+// Sorted by type: coin-only, then pure double, then hybrids.
+export function buildPolicies(): PolicyDef[] {
+  const coins = [1, 2, 3, ALL]
+  const combos: { coin: number; ad: number }[] = []
+  for (const coin of coins) {
+    for (const ad of AD_BUDGETS) {
+      if (ad > coin) continue // can't double more attempts than you fodder
+      if (ad === ALL && coin !== ALL) continue // "ad all" only pairs with "coin all"
+      combos.push({ coin, ad })
+    }
+  }
+  const type = ({ coin, ad }: { coin: number; ad: number }) => (ad === 0 ? 1 : ad >= coin ? 2 : 3)
+  combos.sort((a, b) => type(a) - type(b) || a.coin - b.coin || a.ad - b.ad)
+  return [
+    { label: 'Sans fourrage', policy: { coinUntil: 0, adUntil: 0 } },
+    ...combos.map((c) => ({
+      label: policyLabel(c.coin, c.ad),
+      policy: { coinUntil: c.coin, adUntil: c.ad },
+    })),
+  ]
+}
+const POLICIES = buildPolicies()
+
+// The fodder strategy that is optimal at a given willingness-to-pay (coins per
+// saved cycle), within an ad budget. Used by both the planner and the analysis column.
+export function bestPolicyLabel(p: BreedParams, wtp: number, maxAds: number): string {
+  const rows = evaluatePolicies(p, wtp, POLICIES).filter((r) => r.policy.adUntil <= maxAds)
+  const { segments } = optimalThresholds(rows)
+  let label = 'Sans fourrage'
+  for (const s of segments) if (s.from <= wtp) label = s.label
+  return label
 }
 
 export interface PolicyRow {
