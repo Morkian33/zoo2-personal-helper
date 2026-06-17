@@ -26,7 +26,7 @@ export async function loadCatalog(): Promise<CatalogData> {
   const [animalsRes, userRes, shelterRes, variantsRes, userVarRes, biomeRes, colRes, colReqRes] =
     await Promise.all([
       supabase.from('animals').select('*').order('name_en', { ascending: true }),
-      supabase.from('user_animals').select('animal_id, owned_count, max_level'),
+      supabase.from('user_animals').select('animal_id, owned_count, max_level, favorite'),
       supabase.from('user_shelters').select('biome, level'),
       supabase.from('animal_variants').select('*').order('coat_name', { ascending: true }),
       supabase.from('user_variants').select('variant_id, owned, max_level'),
@@ -42,6 +42,7 @@ export async function loadCatalog(): Promise<CatalogData> {
     states.set(row.animal_id as number, {
       owned_count: (row.owned_count as number) ?? 0,
       max_level: (row.max_level as number | null) ?? null,
+      favorite: Boolean(row.favorite),
     })
   }
 
@@ -79,6 +80,7 @@ export async function loadCatalog(): Promise<CatalogData> {
       metrics: computeMetrics(a),
       owned_count: st?.owned_count ?? 0,
       max_level: st?.max_level ?? null,
+      favorite: st?.favorite ?? false,
       variants: variantsByAnimal.get(a.id) ?? [],
     }
   })
@@ -125,6 +127,7 @@ export async function setUserAnimal(
       animal_id: animalId,
       owned_count: next.owned_count,
       max_level: next.max_level,
+      favorite: next.favorite,
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'user_id,animal_id' },

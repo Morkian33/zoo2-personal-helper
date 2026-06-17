@@ -53,6 +53,7 @@ export interface AnimalMetrics {
 export interface UserAnimalState {
   owned_count: number
   max_level: number | null
+  favorite: boolean
 }
 
 // Per-user shelter level for each biome (table public.user_shelters).
@@ -89,5 +90,6 @@ export interface AnimalEntry extends AnimalRow {
   metrics: AnimalMetrics
   owned_count: number
   max_level: number | null
+  favorite: boolean
   variants: VariantEntry[]
 }

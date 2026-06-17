@@ -624,6 +624,31 @@ tbody td select {
   text-align: center;
 }
 
+/* ---------- Favorites ---------- */
+.star {
+  background: none;
+  padding: 0;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--muted);
+}
+.star.on {
+  color: #f5c518;
+}
+.star:disabled {
+  opacity: 0.4;
+}
+.fav-toggle {
+  background: var(--panel);
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+.fav-toggle.active {
+  background: #f5c518;
+  color: #0b1020;
+  border-color: transparent;
+}
+
 a {
   color: var(--accent);
 }

@@ -10,6 +10,7 @@ export function InventoryTable({
   biomes,
   biomeLabels,
   disabled,
+  onToggleFavorite,
   onSetOwned,
   onSetMaxLevel,
   onCommitMaxLevel,
@@ -22,6 +23,7 @@ export function InventoryTable({
   biomes: string[]
   biomeLabels: BiomeLabels
   disabled: boolean
+  onToggleFavorite: (e: AnimalEntry) => void
   onSetOwned: (e: AnimalEntry, count: number) => void
   onSetMaxLevel: (e: AnimalEntry, value: number | null) => void
   onCommitMaxLevel: (e: AnimalEntry) => void
@@ -32,12 +34,14 @@ export function InventoryTable({
   const [search, setSearch] = useState('')
   const [biome, setBiome] = useState('')
   const [ownedFilter, setOwnedFilter] = useState<'all' | 'owned' | 'not'>('all')
+  const [favOnly, setFavOnly] = useState(false)
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase()
     return entries
       .filter((e) => {
+        if (favOnly && !e.favorite) return false
         if (biome && e.biome !== biome) return false
         if (ownedFilter === 'owned' && e.owned_count === 0) return false
         if (ownedFilter === 'not' && e.owned_count > 0) return false
@@ -45,7 +49,7 @@ export function InventoryTable({
         return true
       })
       .sort((a, b) => (a.name_fr ?? a.name_en).localeCompare(b.name_fr ?? b.name_en, 'fr'))
-  }, [entries, search, biome, ownedFilter])
+  }, [entries, search, biome, ownedFilter, favOnly])
 
   function toggle(id: number) {
     setExpanded((prev) => {
@@ -79,6 +83,13 @@ export function InventoryTable({
           <option value="owned">Possédés</option>
           <option value="not">Non possédés</option>
         </select>
+        <button
+          className={`fav-toggle small ${favOnly ? 'active' : ''}`}
+          onClick={() => setFavOnly((v) => !v)}
+          title="N'afficher que les favoris"
+        >
+          ★ Favoris
+        </button>
         <span className="count">{rows.length}</span>
       </div>
 
@@ -86,6 +97,7 @@ export function InventoryTable({
         <table>
           <thead>
             <tr>
+              <th className="center" title="Favori">★</th>
               <th>Animal</th>
               <th>Biome / source</th>
               <th>Abri requis</th>
@@ -100,6 +112,16 @@ export function InventoryTable({
               return (
                 <Fragment key={e.id}>
                   <tr className={e.owned_count > 0 ? 'owned' : ''}>
+                    <td className="center">
+                      <button
+                        className={`star ${e.favorite ? 'on' : ''}`}
+                        disabled={disabled}
+                        title={e.favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                        onClick={() => onToggleFavorite(e)}
+                      >
+                        {e.favorite ? '★' : '☆'}
+                      </button>
+                    </td>
                     <td>
                       {e.variants.length > 0 ? (
                         <button className="link expand" onClick={() => toggle(e.id)}>
@@ -142,6 +164,7 @@ export function InventoryTable({
                   {isOpen &&
                     e.variants.map((v) => (
                       <tr key={`v${v.id}`} className="variant-row">
+                        <td />
                         <td className="variant-name">↳ {v.coat_name_fr ?? v.coat_name}</td>
                         <td className="muted">
                           {v.obtained_from ?? '—'}

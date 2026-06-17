@@ -51,6 +51,7 @@ create table if not exists public.user_animals (
   animal_id    bigint  not null references public.animals(id) on delete cascade,
   owned_count  smallint not null default 0 check (owned_count between 0 and 2),
   max_level    int,
+  favorite     boolean not null default false,
   updated_at   timestamptz not null default now(),
   primary key (user_id, animal_id)
 );

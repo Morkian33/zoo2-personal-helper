@@ -13,6 +13,7 @@ interface Filters {
   biome: string
   ownedFilter: 'all' | 'owned' | 'not'
   breedFilter: 'all' | 'yes'
+  favOnly: boolean
   sortKey: string
   sortDir: SortDir
 }
@@ -21,6 +22,7 @@ const DEFAULT_FILTERS: Filters = {
   biome: '',
   ownedFilter: 'all',
   breedFilter: 'all',
+  favOnly: false,
   sortKey: 'xphsa',
   sortDir: 'desc',
 }
@@ -123,6 +125,7 @@ export function AnalysisTable({
   const [biome, setBiome] = useState(saved.biome)
   const [ownedFilter, setOwnedFilter] = useState<'all' | 'owned' | 'not'>(saved.ownedFilter)
   const [breedFilter, setBreedFilter] = useState<'all' | 'yes'>(saved.breedFilter)
+  const [favOnly, setFavOnly] = useState(saved.favOnly)
   const [sortKey, setSortKey] = useState(saved.sortKey)
   const [sortDir, setSortDir] = useState<SortDir>(saved.sortDir)
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(loadHiddenCols)
@@ -146,15 +149,16 @@ export function AnalysisTable({
   useEffect(() => {
     localStorage.setItem(
       FILTERS_KEY,
-      JSON.stringify({ search, biome, ownedFilter, breedFilter, sortKey, sortDir }),
+      JSON.stringify({ search, biome, ownedFilter, breedFilter, favOnly, sortKey, sortDir }),
     )
-  }, [search, biome, ownedFilter, breedFilter, sortKey, sortDir])
+  }, [search, biome, ownedFilter, breedFilter, favOnly, sortKey, sortDir])
 
   function resetFilters() {
     setSearch(DEFAULT_FILTERS.search)
     setBiome(DEFAULT_FILTERS.biome)
     setOwnedFilter(DEFAULT_FILTERS.ownedFilter)
     setBreedFilter(DEFAULT_FILTERS.breedFilter)
+    setFavOnly(DEFAULT_FILTERS.favOnly)
     setSortKey(DEFAULT_FILTERS.sortKey)
     setSortDir(DEFAULT_FILTERS.sortDir)
   }
@@ -163,6 +167,7 @@ export function AnalysisTable({
     biome !== DEFAULT_FILTERS.biome ||
     ownedFilter !== DEFAULT_FILTERS.ownedFilter ||
     breedFilter !== DEFAULT_FILTERS.breedFilter ||
+    favOnly !== DEFAULT_FILTERS.favOnly ||
     sortKey !== DEFAULT_FILTERS.sortKey ||
     sortDir !== DEFAULT_FILTERS.sortDir
 
@@ -176,6 +181,7 @@ export function AnalysisTable({
         breedReco: breedRecoFor(e, breedWtp, breedMaxAds),
       }))
       .filter((e) => {
+        if (favOnly && !e.favorite) return false
         if (biome && e.biome !== biome) return false
         if (ownedFilter === 'owned' && e.owned_count === 0) return false
         if (ownedFilter === 'not' && e.owned_count > 0) return false
@@ -195,7 +201,7 @@ export function AnalysisTable({
       }
       return (va - vb) * dir
     })
-  }, [entries, shelters, search, biome, ownedFilter, breedFilter, sortKey, sortDir, breedWtp, breedMaxAds])
+  }, [entries, shelters, search, biome, ownedFilter, breedFilter, favOnly, sortKey, sortDir, breedWtp, breedMaxAds])
 
   function toggleSort(key: string) {
     if (key === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -231,6 +237,13 @@ export function AnalysisTable({
           <option value="all">Élevage : tous</option>
           <option value="yes">Élevables</option>
         </select>
+        <button
+          className={`fav-toggle small ${favOnly ? 'active' : ''}`}
+          onClick={() => setFavOnly((v) => !v)}
+          title="N'afficher que les favoris"
+        >
+          ★ Favoris
+        </button>
         {isFiltered && (
           <button className="small" onClick={resetFilters}>
             Réinitialiser

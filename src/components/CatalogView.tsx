@@ -98,11 +98,22 @@ export function CatalogView({ userId }: { userId: string | null }) {
     setEntries((list) => list.map((x) => (x.id === id ? { ...x, ...patch } : x)))
   }
 
-  function persistAnimal(e: AnimalEntry, patch: { owned_count?: number; max_level?: number | null }) {
+  function persistAnimal(
+    e: AnimalEntry,
+    patch: { owned_count?: number; max_level?: number | null; favorite?: boolean },
+  ) {
     if (!userId) return
-    setUserAnimal(userId, e.id, patch, { owned_count: e.owned_count, max_level: e.max_level }).catch(
-      (err) => console.error('Failed to save animal state', err),
-    )
+    setUserAnimal(userId, e.id, patch, {
+      owned_count: e.owned_count,
+      max_level: e.max_level,
+      favorite: e.favorite,
+    }).catch((err) => console.error('Failed to save animal state', err))
+  }
+
+  function toggleFavorite(e: AnimalEntry) {
+    const favorite = !e.favorite
+    patchEntry(e.id, { favorite })
+    persistAnimal(e, { favorite })
   }
 
   function patchVariant(v: VariantEntry, patch: Partial<VariantEntry>) {
@@ -224,6 +235,7 @@ export function CatalogView({ userId }: { userId: string | null }) {
             biomes={biomes}
             biomeLabels={biomeLabels}
             disabled={!userId}
+            onToggleFavorite={toggleFavorite}
             onSetOwned={(e, count) => {
               persistAnimal(e, { owned_count: count })
               patchEntry(e.id, { owned_count: count })
