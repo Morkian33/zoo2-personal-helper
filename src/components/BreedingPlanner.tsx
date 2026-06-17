@@ -1,6 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { parseHours } from '../lib/duration'
-import { evaluatePolicies, parkBonus, type BreedParams, type FodderPolicy } from '../lib/breedingPlan'
+import {
+  evaluatePolicies,
+  optimalThresholds,
+  parkBonus,
+  type BreedParams,
+  type FodderPolicy,
+} from '../lib/breedingPlan'
 import { int } from '../lib/format'
 import type { AnimalEntry } from '../lib/types'
 
@@ -16,16 +22,27 @@ function fmtHours(h: number): string {
   return r ? `${d}j ${r}h` : `${d}j`
 }
 
-const POLICIES: { label: string; policy: FodderPolicy }[] = [
-  { label: 'Sans fourrage', policy: { coinUntil: 0, adUntil: 0 } },
-  { label: 'Pièce 1ʳᵉ', policy: { coinUntil: 1, adUntil: 0 } },
-  { label: 'Pièce 1-2', policy: { coinUntil: 2, adUntil: 0 } },
-  { label: 'Pièce 1-3', policy: { coinUntil: 3, adUntil: 0 } },
-  { label: 'Pièce toutes', policy: { coinUntil: 999, adUntil: 0 } },
-  { label: 'Double 1ʳᵉ', policy: { coinUntil: 1, adUntil: 1 } },
-  { label: 'Double 1-2', policy: { coinUntil: 2, adUntil: 2 } },
-  { label: 'Double toutes', policy: { coinUntil: 999, adUntil: 999 } },
+interface PolicyDef {
+  label: string
+  policy: FodderPolicy
+  usesAds: boolean
+}
+const POLICIES: PolicyDef[] = [
+  { label: 'Sans fourrage', policy: { coinUntil: 0, adUntil: 0 }, usesAds: false },
+  { label: 'Pièce 1ʳᵉ', policy: { coinUntil: 1, adUntil: 0 }, usesAds: false },
+  { label: 'Pièce 1-2', policy: { coinUntil: 2, adUntil: 0 }, usesAds: false },
+  { label: 'Pièce 1-3', policy: { coinUntil: 3, adUntil: 0 }, usesAds: false },
+  { label: 'Pièce toutes', policy: { coinUntil: 999, adUntil: 0 }, usesAds: false },
+  { label: 'Double 1ʳᵉ', policy: { coinUntil: 1, adUntil: 1 }, usesAds: true },
+  { label: 'Double 1-2', policy: { coinUntil: 2, adUntil: 2 }, usesAds: true },
+  { label: 'Double toutes', policy: { coinUntil: 999, adUntil: 999 }, usesAds: true },
 ]
+
+// Personal preferences persisted across sessions (not account-specific).
+function loadNum(key: string, def: number): number {
+  const v = Number(localStorage.getItem(key))
+  return Number.isFinite(v) && v > 0 ? v : def
+}
 
 export function BreedingPlanner({ entries }: { entries: AnimalEntry[] }) {
   const breedable = useMemo(
@@ -39,7 +56,11 @@ export function BreedingPlanner({ entries }: { entries: AnimalEntry[] }) {
   const [search, setSearch] = useState('')
   const [id, setId] = useState<number | null>(null)
   const [park, setPark] = useState(false)
-  const [wtp, setWtp] = useState(0) // coins willing to pay to save one breeding cycle
+  const [wtp, setWtp] = useState(() => loadNum('zoo2.breeding.wtp', 0))
+  const [allowAds, setAllowAds] = useState(() => localStorage.getItem('zoo2.breeding.ads') === '1')
+
+  useEffect(() => localStorage.setItem('zoo2.breeding.wtp', String(wtp)), [wtp])
+  useEffect(() => localStorage.setItem('zoo2.breeding.ads', allowAds ? '1' : '0'), [allowAds])
 
   const filtered = breedable.filter((e) =>
     `${e.name_fr ?? ''} ${e.name_en}`.toLowerCase().includes(search.trim().toLowerCase()),
@@ -62,8 +83,16 @@ export function BreedingPlanner({ entries }: { entries: AnimalEntry[] }) {
       }
     : null
 
-  const rows = params ? evaluatePolicies(params, wtp, POLICIES) : []
-  const bestNet = rows.length ? Math.max(...rows.map((r) => r.net)) : 0
+  const activePolicies = POLICIES.filter((p) => allowAds || !p.usesAds)
+  const rows = params ? evaluatePolicies(params, wtp, activePolicies) : []
+  const { segments, maxThreshold } = useMemo(
+    () => (rows.length ? optimalThresholds(rows) : { segments: [], maxThreshold: 0 }),
+    [rows],
+  )
+  // Strategy that is optimal at the current wtp (last segment whose threshold <= wtp).
+  const applicable = segments.filter((s) => s.from <= wtp)
+  const optimalLabel = applicable.length ? applicable[applicable.length - 1].label : 'Sans fourrage'
+  const sliderMax = Math.max(Math.ceil((maxThreshold * 1.25) / 50) * 50, 100)
 
   return (
     <div className="planner">
@@ -101,24 +130,58 @@ export function BreedingPlanner({ entries }: { entries: AnimalEntry[] }) {
               {(Math.min(params.base, 0.1) * 100).toFixed(0)}/échec · lancement {int(params.cost)} pièces ·
               cycle {fmtHours(params.cycleHours)} (élevage + 8h)
             </span>
-            <label className="admin-check">
-              <input type="checkbox" checked={park} onChange={(e) => setPark(e.target.checked)} />
-              Parc à bonus (+{(parkBonus(params.base) * 100).toFixed(0)}% par tentative)
-            </label>
+            <div className="planner-opts">
+              <label className="admin-check">
+                <input type="checkbox" checked={park} onChange={(e) => setPark(e.target.checked)} />
+                Parc à bonus (+{(parkBonus(params.base) * 100).toFixed(0)}% par tentative)
+              </label>
+              <label className="admin-check">
+                <input
+                  type="checkbox"
+                  checked={allowAds}
+                  onChange={(e) => setAllowAds(e.target.checked)}
+                />
+                J'accepte de regarder des pubs (fourrage double)
+              </label>
+            </div>
+
             <label className="wtp">
-              Valeur d'un cycle d'élevage économisé (pièces)
-              <input
-                type="number"
-                min={0}
-                step={50}
-                value={wtp}
-                onChange={(e) => setWtp(Number(e.target.value) || 0)}
-              />
+              Combien je suis prêt à payer pour éviter 1 cycle d'élevage (~{fmtHours(params.cycleHours)}) :{' '}
+              <b>{int(wtp)} pièces</b>
             </label>
-            <span className="muted">
-              Règle le curseur sur ce que « gagner ~{fmtHours(params.cycleHours)} » vaut pour toi en pièces.
-              La valeur nette devient positive quand le fourrage vaut le coup.
-            </span>
+            <div className="wtp-slider">
+              <input
+                type="range"
+                min={0}
+                max={sliderMax}
+                step={Math.max(1, Math.round(sliderMax / 200))}
+                value={Math.min(wtp, sliderMax)}
+                onChange={(e) => setWtp(Number(e.target.value))}
+              />
+              <div className="ticks">
+                {segments
+                  .filter((s) => s.from > 0 && s.from <= sliderMax)
+                  .map((s) => (
+                    <div
+                      key={s.label}
+                      className="tick"
+                      style={{ left: `${(s.from / sliderMax) * 100}%` }}
+                      title={`${s.label} dès ${int(s.from)} pièces`}
+                    >
+                      <span className="tick-mark" />
+                      <span className="tick-label">
+                        {int(s.from)}
+                        <br />
+                        {s.label}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+            <p className="muted">
+              Optimal à {int(wtp)} pièces/cycle : <b>{optimalLabel}</b>. Les repères sur la réglette
+              indiquent à partir de quelle valorisation chaque stratégie devient la meilleure.
+            </p>
           </div>
 
           <div className="table-wrap">
@@ -135,7 +198,7 @@ export function BreedingPlanner({ entries }: { entries: AnimalEntry[] }) {
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.label} className={r.net === bestNet && r.net > 0 ? 'owned' : ''}>
+                  <tr key={r.label} className={r.label === optimalLabel ? 'owned' : ''}>
                     <td>{r.label}</td>
                     <td className="num">{r.result.attempts.toFixed(2)}</td>
                     <td className="num">{fmtHours(r.result.hours)}</td>

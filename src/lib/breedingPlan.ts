@@ -66,6 +66,55 @@ export interface PolicyRow {
   net: number
 }
 
+export interface EnvelopeSegment {
+  from: number // optimal from this wtp (coins-per-cycle-saved) upward
+  label: string
+}
+
+// Each policy's net value is linear in wtp: net_i(w) = attemptsSaved_i * w - extraCoins_i.
+// The optimal policy as wtp grows is the upper envelope of these lines. Returns the
+// switch points (which policy becomes best from which wtp) and the last threshold.
+export function optimalThresholds(rows: PolicyRow[]): {
+  segments: EnvelopeSegment[]
+  maxThreshold: number
+} {
+  const lines = rows.map((r) => ({ a: r.attemptsSaved, b: -r.extraCoins, label: r.label }))
+  const breaks: number[] = []
+  for (let i = 0; i < lines.length; i++) {
+    for (let j = i + 1; j < lines.length; j++) {
+      if (Math.abs(lines[i].a - lines[j].a) > 1e-12) {
+        const w = (lines[j].b - lines[i].b) / (lines[i].a - lines[j].a)
+        if (w > 1e-9) breaks.push(w)
+      }
+    }
+  }
+  breaks.sort((a, b) => a - b)
+  const maxThreshold = breaks.length ? breaks[breaks.length - 1] : 0
+  const sentinel = maxThreshold + Math.max(1, maxThreshold * 0.25)
+  const lo = [0, ...breaks]
+  const argmaxAt = (w: number) => {
+    let best = lines[0]
+    let bv = -Infinity
+    for (const l of lines) {
+      const v = l.a * w + l.b
+      if (v > bv + 1e-9 || (Math.abs(v - bv) < 1e-9 && l.a > best.a)) {
+        bv = v
+        best = l
+      }
+    }
+    return best.label
+  }
+  const segments: EnvelopeSegment[] = []
+  for (let k = 0; k < lo.length; k++) {
+    const hi = lo[k + 1] ?? sentinel
+    const label = argmaxAt((lo[k] + hi) / 2)
+    if (!segments.length || segments[segments.length - 1].label !== label) {
+      segments.push({ from: lo[k], label })
+    }
+  }
+  return { segments, maxThreshold }
+}
+
 // Evaluates a set of fodder policies and ranks them by net value, given how many
 // coins the player is willing to pay to save one breeding cycle.
 export function evaluatePolicies(
