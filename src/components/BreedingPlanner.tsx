@@ -7,7 +7,7 @@ import {
   type BreedParams,
   type FodderPolicy,
 } from '../lib/breedingPlan'
-import { int } from '../lib/format'
+import { int, norm } from '../lib/format'
 import type { AnimalEntry } from '../lib/types'
 
 // Biomes that have a dedicated breeding park granting the +50% proba/XP bonus.
@@ -91,7 +91,7 @@ export function BreedingPlanner({ entries }: { entries: AnimalEntry[] }) {
   useEffect(() => localStorage.setItem('zoo2.breeding.maxAds', String(maxAds)), [maxAds])
 
   const filtered = breedable.filter((e) =>
-    `${e.name_fr ?? ''} ${e.name_en}`.toLowerCase().includes(search.trim().toLowerCase()),
+    norm(`${e.name_fr ?? ''} ${e.name_en}`).includes(norm(search.trim())),
   )
   const animal = breedable.find((e) => e.id === id) ?? null
 

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { canBreed } from '../lib/catalog'
+import { norm } from '../lib/format'
 import type { AnimalEntry, ShelterLevels } from '../lib/types'
 import type { CollectionRow, CollectionRequirementRow } from '../lib/collections'
 
@@ -75,9 +76,9 @@ export function CollectionsView({
   )
 
   const rows = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = norm(search.trim())
     return collections
-      .filter((c) => (!sector || c.sector === sector) && (!q || c.name.toLowerCase().includes(q)))
+      .filter((c) => (!sector || c.sector === sector) && (!q || norm(c.name).includes(q)))
       .map((c) => {
         const reqs = reqsByCol.get(c.id) ?? []
         let met = 0

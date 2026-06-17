@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { fetchWikiAnimal, type WikiVariant } from '../lib/wiki'
 import { upsertVariants } from '../lib/catalog'
+import { norm } from '../lib/format'
 import type { AnimalEntry } from '../lib/types'
 
 type FieldType = 'text' | 'number' | 'date' | 'bool'
@@ -146,11 +147,7 @@ export function AdminPanel({
     editingId != null ? (entries.find((e) => e.id === editingId)?.variants ?? []) : []
 
   const matches = search.trim()
-    ? entries
-        .filter((e) =>
-          `${e.name_fr ?? ''} ${e.name_en}`.toLowerCase().includes(search.trim().toLowerCase()),
-        )
-        .slice(0, 12)
+    ? entries.filter((e) => norm(`${e.name_fr ?? ''} ${e.name_en}`).includes(norm(search.trim()))).slice(0, 12)
     : []
 
   function loadEntry(e: AnimalEntry) {

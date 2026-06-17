@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { setAnimalNameFr, setBiomeLabel, setVariantCoatFr } from '../lib/catalog'
+import { norm } from '../lib/format'
 import type { AnimalEntry, BiomeLabels } from '../lib/types'
 
 // Admin editor for FR labels: biomes (global) and per-variant coat names.
@@ -45,14 +46,14 @@ export function TranslationsPanel({
     setStatus(msg)
   }
 
-  const q = search.trim().toLowerCase()
+  const q = norm(search.trim())
   const shownAnimals = animals.filter((a) => {
     if (onlyMissing && (animalDraft[a.id] ?? '').trim()) return false
-    return !q || a.name_en.toLowerCase().includes(q)
+    return !q || norm(a.name_en).includes(q)
   })
   const shownVariants = variants.filter((v) => {
     if (onlyMissing && (variantDraft[v.id] ?? '').trim()) return false
-    return !q || `${v.animal} ${v.coat_name}`.toLowerCase().includes(q)
+    return !q || norm(`${v.animal} ${v.coat_name}`).includes(q)
   })
 
   return (

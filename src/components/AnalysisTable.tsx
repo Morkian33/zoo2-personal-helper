@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { canBreed } from '../lib/catalog'
-import { int, dec2, signed, ownedLabel } from '../lib/format'
+import { int, dec2, signed, ownedLabel, norm } from '../lib/format'
 import { biomeLabel } from '../lib/labels'
 import type { AnimalEntry, ShelterLevels, BiomeLabels } from '../lib/types'
 
@@ -55,7 +55,7 @@ export function AnalysisTable({
 
   const rows = useMemo(() => {
     const col = COLUMNS.find((c) => c.key === sortKey)!
-    const q = search.trim().toLowerCase()
+    const q = norm(search.trim())
     const display: DisplayRow[] = entries
       .map((e) => ({ ...e, breedingPossible: canBreed(e, shelters) }))
       .filter((e) => {
@@ -63,7 +63,7 @@ export function AnalysisTable({
         if (ownedFilter === 'owned' && e.owned_count === 0) return false
         if (ownedFilter === 'not' && e.owned_count > 0) return false
         if (breedFilter === 'yes' && !e.breedingPossible) return false
-        if (q && !`${e.name_fr ?? ''} ${e.name_en}`.toLowerCase().includes(q)) return false
+        if (q && !norm(`${e.name_fr ?? ''} ${e.name_en}`).includes(q)) return false
         return true
       })
     const dir = sortDir === 'asc' ? 1 : -1

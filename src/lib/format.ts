@@ -5,3 +5,10 @@ export const signed = (v: number) => (v > 0 ? '+' : '') + Math.round(v).toLocale
 
 // "owned_count" (0/1/2) as a short label.
 export const ownedLabel = (n: number) => (n === 0 ? '—' : n === 1 ? '1' : '2+')
+
+// Normalize text for search: lowercase + strip accents ("chèvre" matches "chevr").
+export const norm = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
