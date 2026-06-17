@@ -39,20 +39,30 @@ function policyLabel(coin: number, ad: number): string {
   return `Double ${rangeLabel(ad)} +pièce →${coin === ALL ? 'fin' : coin}` // hybrid
 }
 
+const AD_BUDGETS = [0, 1, 2, ALL] // options for "max ads per breeding"
+
 // Full strategy set shown in the table: coin fodder up to K, optionally double
 // (coin+ad) on the first few attempts (hybrid = double early, then coin only).
+// Sorted by type: coin-only, then pure double, then hybrids.
 function buildPolicies(): PolicyDef[] {
-  const coins = [1, 2, 3, 5, ALL]
-  const ads = [0, 1, 2, ALL]
-  const out: PolicyDef[] = [{ label: 'Sans fourrage', policy: { coinUntil: 0, adUntil: 0 } }]
+  const coins = [1, 2, 3, ALL]
+  const combos: { coin: number; ad: number }[] = []
   for (const coin of coins) {
-    for (const ad of ads) {
+    for (const ad of AD_BUDGETS) {
       if (ad > coin) continue // can't double more attempts than you fodder
       if (ad === ALL && coin !== ALL) continue // "ad all" only pairs with "coin all"
-      out.push({ label: policyLabel(coin, ad), policy: { coinUntil: coin, adUntil: ad } })
+      combos.push({ coin, ad })
     }
   }
-  return out
+  const type = ({ coin, ad }: { coin: number; ad: number }) => (ad === 0 ? 1 : ad >= coin ? 2 : 3)
+  combos.sort((a, b) => type(a) - type(b) || a.coin - b.coin || a.ad - b.ad)
+  return [
+    { label: 'Sans fourrage', policy: { coinUntil: 0, adUntil: 0 } },
+    ...combos.map((c) => ({
+      label: policyLabel(c.coin, c.ad),
+      policy: { coinUntil: c.coin, adUntil: c.ad },
+    })),
+  ]
 }
 const POLICIES = buildPolicies()
 
@@ -158,11 +168,13 @@ export function BreedingPlanner({ entries }: { entries: AnimalEntry[] }) {
               </label>
               <label className="admin-check">
                 Pubs max / élevage
-                <select value={maxAds} onChange={(e) => setMaxAds(Number(e.target.value))}>
+                <select
+                  value={AD_BUDGETS.includes(maxAds) ? maxAds : ALL}
+                  onChange={(e) => setMaxAds(Number(e.target.value))}
+                >
                   <option value={0}>aucune</option>
                   <option value={1}>1</option>
                   <option value={2}>2</option>
-                  <option value={3}>3</option>
                   <option value={ALL}>illimité</option>
                 </select>
               </label>
