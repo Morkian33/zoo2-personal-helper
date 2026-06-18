@@ -12,6 +12,7 @@ import {
   type BreedParams,
 } from '../lib/breedingPlan'
 import { int, norm } from '../lib/format'
+import { fodderCostFactor, type EventConfig } from '../lib/events'
 import type { AnimalEntry } from '../lib/types'
 
 function fmtHours(h: number): string {
@@ -25,12 +26,14 @@ const POLICIES = buildPolicies()
 
 export function BreedingPlanner({
   entries,
+  events,
   wtp,
   setWtp,
   maxAds,
   setMaxAds,
 }: {
   entries: AnimalEntry[]
+  events: EventConfig
   wtp: number
   setWtp: (n: number) => void
   maxAds: number
@@ -64,6 +67,7 @@ export function BreedingPlanner({
     ? {
         base: animal.breed_proba!,
         cost: animal.breed_cost!,
+        fodderCost: animal.breed_cost! * fodderCostFactor(events),
         cycleHours: (parseHours(animal.breed_duration) ?? 0) + COOLDOWN_HOURS,
         park,
       }
@@ -144,7 +148,8 @@ export function BreedingPlanner({
             <span className="muted">
               base {(params.base * 100).toFixed(0)}% · incrément pitié +
               {(Math.min(params.base, 0.1) * 100).toFixed(0)}/échec · lancement {int(params.cost)} pièces ·
-              cycle {fmtHours(params.cycleHours)} (élevage + 8h)
+              fourrage {int(params.fodderCost ?? params.cost)} pièces
+              {events.fodder10 ? ' (event −90%)' : ''} · cycle {fmtHours(params.cycleHours)} (élevage + 8h)
             </span>
             <label className="admin-check">
               <input type="checkbox" checked={park} onChange={(e) => setPark(e.target.checked)} />

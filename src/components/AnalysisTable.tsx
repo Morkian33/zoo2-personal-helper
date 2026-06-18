@@ -4,6 +4,7 @@ import { int, dec2, signed, ownedLabel, norm } from '../lib/format'
 import { biomeLabel } from '../lib/labels'
 import { parseHours } from '../lib/duration'
 import { COOLDOWN_HOURS, bestPolicyLabel } from '../lib/breedingPlan'
+import { fodderCostFactor, type EventConfig } from '../lib/events'
 import type { AnimalEntry, ShelterLevels, BiomeLabels } from '../lib/types'
 
 type SortDir = 'asc' | 'desc'
@@ -63,12 +64,13 @@ interface DisplayRow extends AnimalEntry {
 
 // Recommended fodder strategy for an animal at the player's current valuation.
 // Baseline for now: no bonus-park assumption.
-function breedRecoFor(e: AnimalEntry, wtp: number, maxAds: number): string | null {
+function breedRecoFor(e: AnimalEntry, wtp: number, maxAds: number, events: EventConfig): string | null {
   if (e.breed_proba == null || e.breed_proba <= 0 || e.breed_cost == null) return null
   return bestPolicyLabel(
     {
       base: e.breed_proba,
       cost: e.breed_cost,
+      fodderCost: e.breed_cost * fodderCostFactor(events),
       cycleHours: (parseHours(e.breed_duration) ?? 0) + COOLDOWN_HOURS,
       park: false,
     },
@@ -112,6 +114,7 @@ export function AnalysisTable({
   biomeLabels,
   breedWtp,
   breedMaxAds,
+  events,
   disabled,
   onToggleFavorite,
 }: {
@@ -121,6 +124,7 @@ export function AnalysisTable({
   biomeLabels: BiomeLabels
   breedWtp: number
   breedMaxAds: number
+  events: EventConfig
   disabled: boolean
   onToggleFavorite: (e: AnimalEntry) => void
 }) {
@@ -182,7 +186,7 @@ export function AnalysisTable({
       .map((e) => ({
         ...e,
         breedingPossible: canBreed(e, shelters),
-        breedReco: breedRecoFor(e, breedWtp, breedMaxAds),
+        breedReco: breedRecoFor(e, breedWtp, breedMaxAds, events),
       }))
       .filter((e) => {
         if (favOnly && !e.favorite) return false
@@ -205,7 +209,7 @@ export function AnalysisTable({
       }
       return (va - vb) * dir
     })
-  }, [entries, shelters, search, biome, ownedFilter, breedFilter, favOnly, sortKey, sortDir, breedWtp, breedMaxAds])
+  }, [entries, shelters, search, biome, ownedFilter, breedFilter, favOnly, sortKey, sortDir, breedWtp, breedMaxAds, events])
 
   function toggleSort(key: string) {
     if (key === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))

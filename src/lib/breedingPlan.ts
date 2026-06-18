@@ -11,7 +11,8 @@
 
 export interface BreedParams {
   base: number // base success probability, fraction (e.g. 0.04)
-  cost: number // coins per launch (= coins per coin-fodder, same price)
+  cost: number // coins per launch
+  fodderCost?: number // coins per coin-fodder (defaults to cost; lower during a fodder event)
   cycleHours: number // breeding duration + 8h cooldown, hours per attempt
   park: boolean // bred in its bonus park (+trunc(base/2))
 }
@@ -43,9 +44,11 @@ export function parkBonus(base: number): number {
 export function simulate(p: BreedParams, policy: FodderPolicy): CampaignResult {
   const incr = Math.min(p.base, 0.1)
   const bonus = p.park ? parkBonus(p.base) : 0
+  const fodderCost = p.fodderCost ?? p.cost
   let surv = 1
   let attempts = 0
-  let coinUnits = 0 // in units of `cost` (launch = 1, +1 per coin fodder)
+  let launchUnits = 0 // expected launches
+  let fodderUnits = 0 // expected coin fodders
   let ads = 0
   let n = 0
   while (surv > 1e-12 && n < 500) {
@@ -55,11 +58,17 @@ export function simulate(p: BreedParams, policy: FodderPolicy): CampaignResult {
     const ad = n <= policy.adUntil ? 1 : 0
     const q = Math.min(1, natural + bonus + (coin + ad) * p.base)
     attempts += surv
-    coinUnits += surv * (1 + coin)
+    launchUnits += surv
+    fodderUnits += surv * coin
     ads += surv * ad
     surv *= 1 - q
   }
-  return { attempts, coins: coinUnits * p.cost, ads, hours: attempts * p.cycleHours }
+  return {
+    attempts,
+    coins: launchUnits * p.cost + fodderUnits * fodderCost,
+    ads,
+    hours: attempts * p.cycleHours,
+  }
 }
 
 export interface PolicyDef {

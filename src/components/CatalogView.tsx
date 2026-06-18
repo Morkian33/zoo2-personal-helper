@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { loadCatalog, setUserAnimal, setUserShelter, setUserVariant } from '../lib/catalog'
+import { computeMetrics } from '../lib/metrics'
 import { shelterBiome } from '../lib/biome'
 import type { AnimalEntry, ShelterLevels, VariantEntry, BiomeLabels } from '../lib/types'
 import type { CollectionRow, CollectionRequirementRow } from '../lib/collections'
 import { ALL } from '../lib/breedingPlan'
+import { loadEvents, saveEvents, eventsActive, type EventConfig } from '../lib/events'
+import { EventsBar } from './EventsBar'
 import { CollectionsView } from './CollectionsView'
 import { BreedingPlanner } from './BreedingPlanner'
 import { SheltersPanel } from './SheltersPanel'
@@ -45,6 +48,15 @@ export function CatalogView({ userId }: { userId: string | null }) {
   })
   useEffect(() => localStorage.setItem('zoo2.breeding.wtp', String(breedWtp)), [breedWtp])
   useEffect(() => localStorage.setItem('zoo2.breeding.maxAds', String(breedMaxAds)), [breedMaxAds])
+
+  // Active in-game events (fodder discount, twins/triplets, XP×2). Global +
+  // persisted; recompute the derived metrics whenever they change.
+  const [events, setEvents] = useState<EventConfig>(loadEvents)
+  useEffect(() => saveEvents(events), [events])
+  const entriesWithMetrics = useMemo(
+    () => (eventsActive(events) ? entries.map((e) => ({ ...e, metrics: computeMetrics(e, events) })) : entries),
+    [entries, events],
+  )
 
   // From the FR-labels tab: jump to the Animaux tab with this animal loaded.
   function editAnimal(id: number) {
@@ -183,6 +195,7 @@ export function CatalogView({ userId }: { userId: string | null }) {
 
   return (
     <>
+      <EventsBar events={events} setEvents={setEvents} />
       <nav className="tabs">
         <button className={`tab ${tab === 'analysis' ? 'active' : ''}`} onClick={() => setTab('analysis')}>
           Analyse
@@ -211,12 +224,13 @@ export function CatalogView({ userId }: { userId: string | null }) {
 
       {tab === 'analysis' && (
         <AnalysisTable
-          entries={entries}
+          entries={entriesWithMetrics}
           shelters={shelters}
           biomes={biomes}
           biomeLabels={biomeLabels}
           breedWtp={breedWtp}
           breedMaxAds={breedMaxAds}
+          events={events}
           disabled={!userId}
           onToggleFavorite={toggleFavorite}
         />
@@ -269,6 +283,7 @@ export function CatalogView({ userId }: { userId: string | null }) {
       {tab === 'breeding' && (
         <BreedingPlanner
           entries={entries}
+          events={events}
           wtp={breedWtp}
           setWtp={setBreedWtp}
           maxAds={breedMaxAds}

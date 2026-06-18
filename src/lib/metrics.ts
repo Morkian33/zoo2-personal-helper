@@ -1,28 +1,28 @@
 import { optimalEnclosure } from './enclosure'
 import { averageBreedingAttempts } from './breeding'
 import { parseHours } from './duration'
+import { NO_EVENT, xpMultiplier, type EventConfig } from './events'
 import type { AnimalRow, AnimalMetrics } from './types'
 
-// Global multipliers (XP events, etc.). Constant for v1, made configurable later.
-const XP_MULTIPLIER = 1
 const COST_MULTIPLIER = 1
 // Resale value of a level-20 animal (factor applied to the base selling price).
 const SELL_LVL20_FACTOR = 1.95
 
-function xpPerHour(value: number | null, time: string | null): number | null {
+function xpPerHour(value: number | null, time: string | null, xpMult: number): number | null {
   const hours = parseHours(time)
   if (value == null || hours == null || hours === 0) return null
-  return (value / hours) * XP_MULTIPLIER
+  return (value / hours) * xpMult
 }
 
-export function computeMetrics(a: AnimalRow): AnimalMetrics {
+export function computeMetrics(a: AnimalRow, events: EventConfig = NO_EVENT): AnimalMetrics {
+  const xpMult = xpMultiplier(events)
   const sizing = optimalEnclosure(a.size, a.max_animal_per_enclosure)
 
   const sizeAdjusted = sizing?.sizeEffective ?? a.size ?? null
 
-  const xpFeedingPerHour = xpPerHour(a.xp_feeding_value, a.xp_feeding_time)
-  const xpPlayingPerHour = xpPerHour(a.xp_playing_value, a.xp_playing_time)
-  const xpCleaningPerHour = xpPerHour(a.xp_cleaning_value, a.xp_cleaning_time)
+  const xpFeedingPerHour = xpPerHour(a.xp_feeding_value, a.xp_feeding_time, xpMult)
+  const xpPlayingPerHour = xpPerHour(a.xp_playing_value, a.xp_playing_time, xpMult)
+  const xpCleaningPerHour = xpPerHour(a.xp_cleaning_value, a.xp_cleaning_time, xpMult)
 
   const sumXpPerHour =
     xpFeedingPerHour != null && xpPlayingPerHour != null && xpCleaningPerHour != null
@@ -34,13 +34,17 @@ export function computeMetrics(a: AnimalRow): AnimalMetrics {
 
   // "Feed x2" doubles the XP of one feeding, so the extra XP gained by paying is
   // xp_feeding_value, for a cost of feed_x2_cost. Higher = more XP per coin spent.
-  const feedX2XpPerCoin = div(a.xp_feeding_value, a.feed_x2_cost)
+  const feedX2XpPerCoin = div(a.xp_feeding_value != null ? a.xp_feeding_value * xpMult : null, a.feed_x2_cost)
 
   const averageAttempts =
     a.breed_proba != null && a.breed_proba > 0 ? averageBreedingAttempts(a.breed_proba) : null
 
+  // Each success yields `births` animals (twins/triplets events), so the expected
+  // cost is shared across them.
   const newbornCost =
-    averageAttempts != null && a.breed_cost != null ? averageAttempts * a.breed_cost : null
+    averageAttempts != null && a.breed_cost != null
+      ? (averageAttempts * a.breed_cost) / events.births
+      : null
 
   const breedingDelta =
     a.price_unit === 'Coins' && a.price_value != null && newbornCost != null
