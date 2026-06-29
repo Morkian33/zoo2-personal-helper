@@ -322,9 +322,6 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                 {recommended.parkBonus && <span className="breed-order-park-badge">parc</span>}
                 {' '}→ offspring niv.&nbsp;
                 <strong>{offspringLevel(recommended.levelA, recommended.levelB)}</strong>
-                <span className="muted" style={{ fontSize: '0.8rem' }}>
-                  {' '}(espérance session {bestValue.toFixed(2)})
-                </span>
               </div>
               <div className="breed-order-actions">
                 <button className="breed-order-btn-success" onClick={() => onValidate(true)}>
@@ -433,9 +430,9 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                       </button>
                     </div>
                   </label>
-                  {dpValues.length > 0 && (
-                    <span className="muted breed-order-val">
-                      {isFirst ? v.toFixed(2) : `${v.toFixed(2)} (${delta.toFixed(2)})`}
+                  {dpValues.length > 0 && !isFirst && (
+                    <span className={`breed-order-val ${delta < -0.05 ? 'breed-order-val-loss' : 'muted'}`}>
+                      {delta.toFixed(2)}
                     </span>
                   )}
                   <button className="small link" onClick={() => removeGroup(group.id)}>

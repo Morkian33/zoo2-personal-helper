@@ -946,10 +946,13 @@ a {
   line-height: 1;
 }
 .breed-order-val {
-  min-width: 6rem;
+  min-width: 4rem;
   text-align: right;
   font-variant-numeric: tabular-nums;
   font-size: 0.8rem;
+}
+.breed-order-val-loss {
+  color: var(--error);
 }
 .breeding-tabs {
   display: grid;
