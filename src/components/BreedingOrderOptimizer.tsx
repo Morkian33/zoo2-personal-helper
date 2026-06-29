@@ -4,7 +4,7 @@ import {
   offspringLevel,
   breedingOrderCrossover,
   nextProbability,
-  computeGroupValues,
+  analyseGroups,
   pairParkBonus,
   type PairGroup,
   type BreedingConfig,
@@ -81,13 +81,14 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
   const parkBonusVal = pBase != null ? pairParkBonus(pBase) : null
   const currentP = session.currentPPct / 100
 
-  const dpValues = useMemo(
+  const analysis = useMemo(
     () =>
       pBase != null && session.groups.length > 0
-        ? computeGroupValues(session.groups, currentP, pBase)
-        : [],
+        ? analyseGroups(session.groups, currentP, pBase)
+        : { base: [], boost1: [], boost2: [] },
     [session.groups, currentP, pBase],
   )
+  const { base: dpValues, boost1: boost1Values, boost2: boost2Values } = analysis
 
   const ranked = useMemo(() => {
     if (dpValues.length === 0) return session.groups.map((g, i) => ({ g, i, v: -Infinity }))
@@ -98,6 +99,28 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
 
   const recommended = ranked[0]?.g ?? null
   const bestValue = ranked[0]?.v ?? 0
+
+  const boost1Best = useMemo(() => {
+    if (boost1Values.length === 0) return null
+    let bestIdx = 0
+    for (let i = 1; i < boost1Values.length; i++) {
+      if (boost1Values[i] > boost1Values[bestIdx]) bestIdx = i
+    }
+    const delta = boost1Values[bestIdx] - bestValue
+    if (delta < 0.01) return null
+    return { group: session.groups[bestIdx], delta }
+  }, [boost1Values, bestValue, session.groups])
+
+  const boost2Best = useMemo(() => {
+    if (boost2Values.length === 0) return null
+    let bestIdx = 0
+    for (let i = 1; i < boost2Values.length; i++) {
+      if (boost2Values[i] > boost2Values[bestIdx]) bestIdx = i
+    }
+    const delta = boost2Values[bestIdx] - bestValue
+    if (delta < 0.01) return null
+    return { group: session.groups[bestIdx], delta }
+  }, [boost2Values, bestValue, session.groups])
   const totalPairs = session.groups.reduce((s, g) => s + g.count, 0)
 
   // ── Pair mutations ────────────────────────────────────────────────────────
@@ -161,6 +184,21 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
 
   function deleteConfig(id: string) {
     setConfigs(configs.filter((c) => c.id !== id))
+  }
+
+  function overwriteConfig(id: string) {
+    if (!session.animalId) return
+    setConfigs(
+      configs.map((c) =>
+        c.id === id
+          ? {
+              ...c,
+              animalId: session.animalId!,
+              groups: session.groups.map(({ id: _id, ...def }) => def),
+            }
+          : c,
+      ),
+    )
   }
 
   // ── Species search ────────────────────────────────────────────────────────
@@ -234,6 +272,15 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                 }>
                   {cfg.name}
                 </button>
+                {session.animalId != null && (
+                  <button
+                    className="small link"
+                    onClick={() => overwriteConfig(cfg.id)}
+                    title="Écraser avec la session actuelle"
+                  >
+                    ↑
+                  </button>
+                )}
                 <button
                   className="small link"
                   onClick={() => deleteConfig(cfg.id)}
@@ -337,6 +384,37 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                   </span>
                 </button>
               </div>
+              {(boost1Best || boost2Best) && (
+                <div className="breed-order-boost">
+                  <span className="breed-order-boost-label">Boosts :</span>
+                  {boost1Best && (
+                    <div className="breed-order-boost-item">
+                      <span className="muted">pièce ou pub</span>
+                      {' → '}
+                      <span>
+                        paire niv.&nbsp;{boost1Best.group.levelA}+{boost1Best.group.levelB}
+                        {boost1Best.group.parkBonus && (
+                          <span className="breed-order-park-badge">parc</span>
+                        )}
+                      </span>
+                      <span className="breed-order-boost-delta">+{boost1Best.delta.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {boost2Best && (
+                    <div className="breed-order-boost-item">
+                      <span className="muted">pièce + pub</span>
+                      {' → '}
+                      <span>
+                        paire niv.&nbsp;{boost2Best.group.levelA}+{boost2Best.group.levelB}
+                        {boost2Best.group.parkBonus && (
+                          <span className="breed-order-park-badge">parc</span>
+                        )}
+                      </span>
+                      <span className="breed-order-boost-delta">+{boost2Best.delta.toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : totalPairs === 0 && session.groups.length > 0 ? (
             <p className="muted">Toutes les paires ont réussi — session terminée.</p>

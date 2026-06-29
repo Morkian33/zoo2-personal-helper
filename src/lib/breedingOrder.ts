@@ -5,7 +5,7 @@ export function offspringLevel(levelA: number, levelB: number): number {
 }
 
 // Probability threshold above which you should validate higher-level pairs first.
-// Only exact for 2 pairs; use computeGroupValues for the general case.
+// Only exact for 2 pairs; use analyseGroups for the general case.
 export function breedingOrderCrossover(pBase: number): number {
   const inc = Math.min(pBase, 0.1)
   const b = pBase - inc
@@ -13,7 +13,6 @@ export function breedingOrderCrossover(pBase: number): number {
 }
 
 // Park bonus: flat additive to success probability for same-biome pairs.
-// Matches parkBonus() in breedingPlan.ts.
 export function pairParkBonus(pBase: number): number {
   return Math.floor(Math.round(pBase * 100) / 2) / 100
 }
@@ -32,7 +31,6 @@ export interface PairGroup {
   parkBonus: boolean
 }
 
-// Serialisable subset saved in configs (no transient id).
 export type PairGroupDef = Omit<PairGroup, 'id'>
 
 export interface BreedingConfig {
@@ -42,38 +40,57 @@ export interface BreedingConfig {
   groups: PairGroupDef[]
 }
 
-// Expected total offspring level for the whole session if each group is validated first,
-// computed via exact DP (optimal play for all subsequent choices).
+// ── Full session analysis ──────────────────────────────────────────────────────
 //
-// The pity counter is global per-species: success resets to pBase, fail increments by inc.
-// Each group may have a park bonus (additive to the pity probability for that attempt only).
-export function computeGroupValues(
+// Returns, for each group, the expected total offspring level for the whole session
+// if that group is validated FIRST under three scenarios:
+//   base   — no fodder boost
+//   boost1 — one fodder applied to that first attempt (+pBase to its effective prob)
+//   boost2 — two fodders stacked on that first attempt (+2·pBase)
+//
+// All three scenarios share the same inner DP (no boost remaining), so the
+// memoisation is built once and reused across all three computations.
+//
+// Boost semantics: "if you can apply one boost (coin OR ad), which pair benefits most
+// from having it applied when you validate it next?"  The computation assumes the boost
+// goes on whichever pair's first step we're evaluating and the rest of the session runs
+// without boosts. Saving a boost for a later step would require boost-count as a DP
+// state dimension; in practice the difference is negligible.
+
+export interface GroupAnalysis {
+  base: number[]
+  boost1: number[]
+  boost2: number[]
+}
+
+export function analyseGroups(
   groups: PairGroup[],
   currentP: number,
   pBase: number,
-): number[] {
-  if (groups.length === 0) return []
-  const inc = Math.min(pBase, 0.1)
-  const bonus = pairParkBonus(pBase)
-  const levels = groups.map((g) => offspringLevel(g.levelA, g.levelB))
-  const bonuses = groups.map((g) => (g.parkBonus ? bonus : 0))
+): GroupAnalysis {
+  if (groups.length === 0) return { base: [], boost1: [], boost2: [] }
 
+  const inc = Math.min(pBase, 0.1)
+  const parkBonus = pairParkBonus(pBase)
+  const levels = groups.map((g) => offspringLevel(g.levelA, g.levelB))
+  const bonuses = groups.map((g) => (g.parkBonus ? parkBonus : 0))
   const memo = new Map<string, number>()
 
-  // p = current pity probability (global, shared)
+  // Inner DP: expected value for the remaining session assuming no boosts.
+  // Uses a copy-based approach (counts.slice()) for correctness with memoisation.
   function dp(counts: number[], p: number): number {
     const key = counts.join(',') + '|' + p.toFixed(6)
-    if (memo.has(key)) return memo.get(key)!
+    const cached = memo.get(key)
+    if (cached !== undefined) return cached
 
     let best = 0
     for (let i = 0; i < counts.length; i++) {
       if (counts[i] === 0) continue
-      const ep = Math.min(1, p + bonuses[i]) // effective prob for this pair
+      const ep = Math.min(1, p + bonuses[i])
       const next = counts.slice()
       next[i]--
-      // success: offspring gained, pity resets to pBase
-      // fail: no offspring, pity increments (bonus does NOT affect the pity increment)
-      const val = ep * (levels[i] + dp(next, pBase)) + (1 - ep) * dp(next, Math.min(p + inc, 1))
+      const val =
+        ep * (levels[i] + dp(next, pBase)) + (1 - ep) * dp(next, Math.min(p + inc, 1))
       if (val > best) best = val
     }
 
@@ -81,12 +98,25 @@ export function computeGroupValues(
     return best
   }
 
-  const baseCounts = groups.map((g) => g.count)
-  return groups.map((g, i) => {
-    if (g.count === 0) return -Infinity
-    const ep = Math.min(1, currentP + bonuses[i])
-    const next = baseCounts.slice()
-    next[i]--
-    return ep * (levels[i] + dp(next, pBase)) + (1 - ep) * dp(next, Math.min(currentP + inc, 1))
-  })
+  // Compute the session value when group i is validated FIRST with `extraBoost`
+  // added to its effective probability.  All subsequent steps follow the inner DP.
+  function firstStepValues(extraBoost: number): number[] {
+    const baseCounts = groups.map((g) => g.count)
+    return groups.map((_, i) => {
+      if (baseCounts[i] === 0) return -Infinity
+      const ep = Math.min(1, currentP + bonuses[i] + extraBoost)
+      const next = baseCounts.slice()
+      next[i]--
+      return (
+        ep * (levels[i] + dp(next, pBase)) +
+        (1 - ep) * dp(next, Math.min(currentP + inc, 1))
+      )
+    })
+  }
+
+  return {
+    base: firstStepValues(0),
+    boost1: firstStepValues(pBase),
+    boost2: firstStepValues(2 * pBase),
+  }
 }

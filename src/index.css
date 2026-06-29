@@ -954,6 +954,32 @@ a {
 .breed-order-val-loss {
   color: var(--error);
 }
+.breed-order-boost {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--line);
+}
+.breed-order-boost-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.breed-order-boost-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+.breed-order-boost-delta {
+  font-weight: 600;
+  color: #6bcf7f;
+  font-variant-numeric: tabular-nums;
+}
 .breeding-tabs {
   display: grid;
   gap: 1rem;
