@@ -109,6 +109,12 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
       .sort((a, b) => b.v - a.v)
   }, [session.groups, dpValues])
 
+  // Lookup: groupId → {rank, v} — used to annotate the stable insertion-order list.
+  const rankMap = useMemo(
+    () => new Map(ranked.map(({ g, v }, rank) => [g.id, { rank, v }])),
+    [ranked],
+  )
+
   const recommended = ranked[0]?.g ?? null
   const bestValue = ranked[0]?.v ?? 0
 
@@ -503,7 +509,10 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
               <p className="muted">Ajoute tes paires ou charge une configuration sauvegardée.</p>
             )}
 
-            {ranked.map(({ g: group, v }, rank) => {
+            {/* Rendered in insertion order (stable) so editing doesn't move rows.
+                Rank numbers and deltas update in-place via rankMap. */}
+            {session.groups.map((group) => {
+              const { rank = -1, v = -Infinity } = rankMap.get(group.id) ?? {}
               const offspring = offspringLevel(group.levelA, group.levelB)
               const isFirst = rank === 0
               const delta = v - bestValue
@@ -514,7 +523,7 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                 100
               return (
                 <div key={group.id} className={`breed-order-pair${isFirst ? ' first' : ''}`}>
-                  <span className="breed-order-rank">{isFirst ? '→' : `${rank + 1}.`}</span>
+                  <span className="breed-order-rank">{isFirst ? '→' : rank >= 0 ? `${rank + 1}.` : '–'}</span>
                   <label>
                     A
                     <input
@@ -594,12 +603,12 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                       </button>
                     </div>
                   </label>
-                  {dpValues.length > 0 && !isFirst && (
-                    <span
-                      className={`breed-order-val ${delta < -0.05 ? 'breed-order-val-loss' : 'muted'}`}
-                    >
-                      {delta.toFixed(2)}
-                    </span>
+                  {dpValues.length > 0 && rank >= 0 && (
+                    isFirst
+                      ? <span className="breed-order-val muted">ε&nbsp;{bestValue.toFixed(2)}</span>
+                      : <span className={`breed-order-val ${delta < -0.05 ? 'breed-order-val-loss' : 'muted'}`}>
+                          {delta.toFixed(2)}
+                        </span>
                   )}
                   <button className="small link" onClick={() => removeGroup(group.id)}>
                     ×
