@@ -114,26 +114,39 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
 
   // Boost recommendation: for each group, the marginal gain from adding 1 more
   // boost (coin or ad) on top of whatever is already configured.
-  // = (boosted_ep - current_ep) × offspring_level, evaluated at currentP.
-  // Separate recommendations for coin (exclude groups with coinBoost) and ad
-  // (exclude groups with adBoost); they usually converge.
+  // Primary sort: gain = min(pBase, 1 - ep) × offspring_level (proportional to
+  //   offspring level when no cap — provably optimal).
+  // Tie-break: prefer the group with the highest already-configured ep (park +
+  //   boosts).  Concentrating boosts on one high-ep group maximises the expected
+  //   value of the first validation step via the pity system.
   const boostReco = useMemo(() => {
     if (!pBase || session.groups.length === 0) return null
     const pkBonus = pairParkBonus(pBase)
 
     let bestCoinGroup: PairGroup | null = null
     let bestCoinGain = 0.005  // min threshold to show
+    let bestCoinEp = -1       // tie-break: highest ep wins
     let bestAdGroup: PairGroup | null = null
     let bestAdGain = 0.005
+    let bestAdEp = -1
 
     for (const g of session.groups) {
       const bonusI = (g.parkBonus ? pkBonus : 0)
       const configuredExtra = (g.coinBoost ? pBase : 0) + (g.adBoost ? pBase : 0)
       const currentEp = Math.min(1, currentP + bonusI + configuredExtra)
       const gain = (Math.min(1, currentEp + pBase) - currentEp) * offspringLevel(g.levelA, g.levelB)
+      // configuredEp = park + boosts only (excludes pity), used as tie-break
+      const configuredEp = bonusI + configuredExtra
 
-      if (!g.coinBoost && gain > bestCoinGain) { bestCoinGain = gain; bestCoinGroup = g }
-      if (!g.adBoost && gain > bestAdGain) { bestAdGain = gain; bestAdGroup = g }
+      const coinBetter =
+        !g.coinBoost &&
+        (gain > bestCoinGain + 1e-9 || (Math.abs(gain - bestCoinGain) < 1e-9 && configuredEp > bestCoinEp))
+      if (coinBetter) { bestCoinGain = gain; bestCoinEp = configuredEp; bestCoinGroup = g }
+
+      const adBetter =
+        !g.adBoost &&
+        (gain > bestAdGain + 1e-9 || (Math.abs(gain - bestAdGain) < 1e-9 && configuredEp > bestAdEp))
+      if (adBetter) { bestAdGain = gain; bestAdEp = configuredEp; bestAdGroup = g }
     }
 
     if (!bestCoinGroup && !bestAdGroup) return null
