@@ -124,15 +124,14 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
   function onValidate(success: boolean) {
     if (pBase == null || recommended == null) return
     const newP = nextProbability(currentP, pBase, success)
-    setSession((s) => {
-      let groups = s.groups
-      if (success) {
-        groups = groups
-          .map((g) => (g.id === recommended.id ? { ...g, count: g.count - 1 } : g))
-          .filter((g) => g.count > 0)
-      }
-      return { ...s, currentPPct: Math.round(newP * 1000) / 10, groups }
-    })
+    const id = recommended.id
+    setSession((s) => ({
+      ...s,
+      currentPPct: Math.round(newP * 1000) / 10,
+      groups: s.groups
+        .map((g) => (g.id === id ? { ...g, count: g.count - 1 } : g))
+        .filter((g) => g.count > 0),
+    }))
   }
 
   // ── Configs ───────────────────────────────────────────────────────────────
