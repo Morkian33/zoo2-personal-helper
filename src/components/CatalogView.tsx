@@ -10,6 +10,7 @@ import { loadEvents, saveEvents, eventsActive, type EventConfig } from '../lib/e
 import { EventsBar } from './EventsBar'
 import { CollectionsView } from './CollectionsView'
 import { BreedingPlanner } from './BreedingPlanner'
+import { BreedingOrderOptimizer } from './BreedingOrderOptimizer'
 import { SheltersPanel } from './SheltersPanel'
 import { AnalysisTable } from './AnalysisTable'
 import { InventoryTable } from './InventoryTable'
@@ -18,8 +19,9 @@ import { SyncPanel } from './SyncPanel'
 import { CollectionsSyncPanel } from './CollectionsSyncPanel'
 import { TranslationsPanel } from './TranslationsPanel'
 
-type Tab = 'analysis' | 'zoo' | 'collections' | 'breeding' | 'admin'
+type Tab = 'analysis' | 'zoo' | 'collections' | 'breeding' | 'events' | 'admin'
 type AdminTab = 'sync' | 'animals' | 'labels'
+type BreedingTab = 'planner' | 'order'
 
 // Container: owns catalog data + personal state, and switches between the
 // "Analyse" (decision table), "Mon zoo" (data entry) and "Admin" (catalog editing) tabs.
@@ -34,6 +36,7 @@ export function CatalogView({ userId }: { userId: string | null }) {
   const [isAdmin, setIsAdmin] = useState(false)
   const [tab, setTab] = useState<Tab>('analysis')
   const [adminTab, setAdminTab] = useState<AdminTab>('sync')
+  const [breedingTab, setBreedingTab] = useState<BreedingTab>('planner')
   const [editRequest, setEditRequest] = useState<{ id: number; nonce: number } | null>(null)
 
   // Breeding preferences: shared between the Élevage tab and the Analyse "Élevage
@@ -195,7 +198,6 @@ export function CatalogView({ userId }: { userId: string | null }) {
 
   return (
     <>
-      <EventsBar events={events} setEvents={setEvents} />
       <nav className="tabs">
         <button className={`tab ${tab === 'analysis' ? 'active' : ''}`} onClick={() => setTab('analysis')}>
           Analyse
@@ -214,6 +216,12 @@ export function CatalogView({ userId }: { userId: string | null }) {
           onClick={() => setTab('breeding')}
         >
           Élevage
+        </button>
+        <button
+          className={`tab ${tab === 'events' ? 'active' : ''}${eventsActive(events) ? ' tab-event-on' : ''}`}
+          onClick={() => setTab('events')}
+        >
+          Événements{eventsActive(events) ? ' ⚡' : ''}
         </button>
         {isAdmin && (
           <button className={`tab ${tab === 'admin' ? 'active' : ''}`} onClick={() => setTab('admin')}>
@@ -281,14 +289,43 @@ export function CatalogView({ userId }: { userId: string | null }) {
       )}
 
       {tab === 'breeding' && (
-        <BreedingPlanner
-          entries={entries}
-          events={events}
-          wtp={breedWtp}
-          setWtp={setBreedWtp}
-          maxAds={breedMaxAds}
-          setMaxAds={setBreedMaxAds}
-        />
+        <div className="breeding-tabs">
+          <nav className="subtabs">
+            <button
+              className={`subtab ${breedingTab === 'planner' ? 'active' : ''}`}
+              onClick={() => setBreedingTab('planner')}
+            >
+              Stratégie fourrage
+            </button>
+            <button
+              className={`subtab ${breedingTab === 'order' ? 'active' : ''}`}
+              onClick={() => setBreedingTab('order')}
+            >
+              Ordre de validation
+            </button>
+          </nav>
+          {breedingTab === 'planner' && (
+            <BreedingPlanner
+              entries={entries}
+              events={events}
+              wtp={breedWtp}
+              setWtp={setBreedWtp}
+              maxAds={breedMaxAds}
+              setMaxAds={setBreedMaxAds}
+            />
+          )}
+          {breedingTab === 'order' && <BreedingOrderOptimizer entries={entries} />}
+        </div>
+      )}
+
+      {tab === 'events' && (
+        <div className="events-tab">
+          <EventsBar events={events} setEvents={setEvents} />
+          <p className="muted">
+            Ces événements sont temporaires et in-game. Ils affectent les calculs dans les onglets
+            Analyse et Élevage (coût du fourrage, naissances multiples, XP).
+          </p>
+        </div>
       )}
 
       {tab === 'admin' && isAdmin && (
