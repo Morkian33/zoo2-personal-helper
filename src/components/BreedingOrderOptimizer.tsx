@@ -56,6 +56,38 @@ function saveConfigs(configs: BreedingConfig[]): void {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function GroupId({ g }: { g: PairGroup }) {
+  return (
+    <>
+      paire niv.&nbsp;{g.levelA}+{g.levelB}
+      {g.parkBonus && <span className="breed-order-park-badge">parc</span>}
+      {g.coinBoost && <span className="breed-order-boost-badge">Pièce</span>}
+      {g.adBoost && <span className="breed-order-boost-badge">Pub</span>}
+    </>
+  )
+}
+
+function BoostLine({
+  label,
+  item,
+}: {
+  label: string
+  item: { group: PairGroup; delta: number }
+}) {
+  return (
+    <div className="breed-order-boost-item">
+      <span className="muted">{label}</span>
+      {' → '}
+      <span><GroupId g={item.group} /></span>
+      <span className="breed-order-boost-delta">+{item.delta.toFixed(2)}</span>
+    </div>
+  )
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) {
   const [session, setSessionRaw] = useState<SessionState>(loadSession)
   const [configs, setConfigsRaw] = useState<BreedingConfig[]>(loadConfigs)
@@ -445,45 +477,11 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                 <div className="breed-order-boost">
                   <span className="breed-order-boost-label">Boosts non configurés :</span>
                   {boostReco.sameGroup && boostReco.coin ? (
-                    <div className="breed-order-boost-item">
-                      <span className="muted">pièce ou pub</span>
-                      {' → '}
-                      <span>
-                        paire niv.&nbsp;{boostReco.coin.group.levelA}+{boostReco.coin.group.levelB}
-                        {boostReco.coin.group.parkBonus && (
-                          <span className="breed-order-park-badge">parc</span>
-                        )}
-                      </span>
-                      <span className="breed-order-boost-delta">
-                        +{boostReco.coin.delta.toFixed(2)}
-                      </span>
-                    </div>
+                    <BoostLine label="pièce ou pub" item={boostReco.coin} />
                   ) : (
                     <>
-                      {boostReco.coin && (
-                        <div className="breed-order-boost-item">
-                          <span className="muted">pièce</span>
-                          {' → '}
-                          <span>
-                            niv.&nbsp;{boostReco.coin.group.levelA}+{boostReco.coin.group.levelB}
-                          </span>
-                          <span className="breed-order-boost-delta">
-                            +{boostReco.coin.delta.toFixed(2)}
-                          </span>
-                        </div>
-                      )}
-                      {boostReco.ad && (
-                        <div className="breed-order-boost-item">
-                          <span className="muted">pub</span>
-                          {' → '}
-                          <span>
-                            niv.&nbsp;{boostReco.ad.group.levelA}+{boostReco.ad.group.levelB}
-                          </span>
-                          <span className="breed-order-boost-delta">
-                            +{boostReco.ad.delta.toFixed(2)}
-                          </span>
-                        </div>
-                      )}
+                      {boostReco.coin && <BoostLine label="pièce" item={boostReco.coin} />}
+                      {boostReco.ad && <BoostLine label="pub" item={boostReco.ad} />}
                     </>
                   )}
                 </div>
