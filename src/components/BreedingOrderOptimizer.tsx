@@ -22,10 +22,22 @@ interface SessionState {
 const SESSION_KEY = 'zoo2.breeding.order'
 const CONFIGS_KEY = 'zoo2.breeding.configs'
 
+type StoredGroup = Omit<PairGroup, 'coinBoost' | 'adBoost'> & {
+  coinBoost?: boolean
+  adBoost?: boolean
+}
+
+function hydrateGroup(g: StoredGroup): PairGroup {
+  return { ...g, coinBoost: g.coinBoost ?? false, adBoost: g.adBoost ?? false }
+}
+
 function loadSession(): SessionState {
   try {
     const s = localStorage.getItem(SESSION_KEY)
-    if (s) return JSON.parse(s) as SessionState
+    if (s) {
+      const raw = JSON.parse(s) as Omit<SessionState, 'groups'> & { groups: StoredGroup[] }
+      return { ...raw, groups: raw.groups.map(hydrateGroup) }
+    }
   } catch { /* ignore */ }
   return { animalId: null, currentPPct: 4, groups: [] }
 }
@@ -81,14 +93,14 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
   const parkBonusVal = pBase != null ? pairParkBonus(pBase) : null
   const currentP = session.currentPPct / 100
 
-  const analysis = useMemo(
+  // DP ordering values (accounts for per-group configured boosts)
+  const dpValues = useMemo(
     () =>
       pBase != null && session.groups.length > 0
         ? analyseGroups(session.groups, currentP, pBase)
-        : { base: [], boost1: [], boost2: [] },
+        : [],
     [session.groups, currentP, pBase],
   )
-  const { base: dpValues, boost1: boost1Values, boost2: boost2Values } = analysis
 
   const ranked = useMemo(() => {
     if (dpValues.length === 0) return session.groups.map((g, i) => ({ g, i, v: -Infinity }))
@@ -100,27 +112,38 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
   const recommended = ranked[0]?.g ?? null
   const bestValue = ranked[0]?.v ?? 0
 
-  const boost1Best = useMemo(() => {
-    if (boost1Values.length === 0) return null
-    let bestIdx = 0
-    for (let i = 1; i < boost1Values.length; i++) {
-      if (boost1Values[i] > boost1Values[bestIdx]) bestIdx = i
-    }
-    const delta = boost1Values[bestIdx] - bestValue
-    if (delta < 0.01) return null
-    return { group: session.groups[bestIdx], delta }
-  }, [boost1Values, bestValue, session.groups])
+  // Boost recommendation: for each group, the marginal gain from adding 1 more
+  // boost (coin or ad) on top of whatever is already configured.
+  // = (boosted_ep - current_ep) × offspring_level, evaluated at currentP.
+  // Separate recommendations for coin (exclude groups with coinBoost) and ad
+  // (exclude groups with adBoost); they usually converge.
+  const boostReco = useMemo(() => {
+    if (!pBase || session.groups.length === 0) return null
+    const pkBonus = pairParkBonus(pBase)
 
-  const boost2Best = useMemo(() => {
-    if (boost2Values.length === 0) return null
-    let bestIdx = 0
-    for (let i = 1; i < boost2Values.length; i++) {
-      if (boost2Values[i] > boost2Values[bestIdx]) bestIdx = i
+    let bestCoinGroup: PairGroup | null = null
+    let bestCoinGain = 0.005  // min threshold to show
+    let bestAdGroup: PairGroup | null = null
+    let bestAdGain = 0.005
+
+    for (const g of session.groups) {
+      const bonusI = (g.parkBonus ? pkBonus : 0)
+      const configuredExtra = (g.coinBoost ? pBase : 0) + (g.adBoost ? pBase : 0)
+      const currentEp = Math.min(1, currentP + bonusI + configuredExtra)
+      const gain = (Math.min(1, currentEp + pBase) - currentEp) * offspringLevel(g.levelA, g.levelB)
+
+      if (!g.coinBoost && gain > bestCoinGain) { bestCoinGain = gain; bestCoinGroup = g }
+      if (!g.adBoost && gain > bestAdGain) { bestAdGain = gain; bestAdGroup = g }
     }
-    const delta = boost2Values[bestIdx] - bestValue
-    if (delta < 0.01) return null
-    return { group: session.groups[bestIdx], delta }
-  }, [boost2Values, bestValue, session.groups])
+
+    if (!bestCoinGroup && !bestAdGroup) return null
+    return {
+      coin: bestCoinGroup ? { group: bestCoinGroup, delta: bestCoinGain } : null,
+      ad: bestAdGroup ? { group: bestAdGroup, delta: bestAdGain } : null,
+      sameGroup: bestCoinGroup?.id === bestAdGroup?.id,
+    }
+  }, [session.groups, currentP, pBase])
+
   const totalPairs = session.groups.reduce((s, g) => s + g.count, 0)
 
   // ── Pair mutations ────────────────────────────────────────────────────────
@@ -129,7 +152,10 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
     const id = crypto.randomUUID()
     setSession((s) => ({
       ...s,
-      groups: [...s.groups, { id, levelA: 5, levelB: 5, count: 1, parkBonus: false }],
+      groups: [
+        ...s.groups,
+        { id, levelA: 5, levelB: 5, count: 1, parkBonus: false, coinBoost: false, adBoost: false },
+      ],
     }))
   }
 
@@ -160,10 +186,9 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
   // ── Configs ───────────────────────────────────────────────────────────────
 
   function loadConfig(cfg: BreedingConfig) {
-    const groups: PairGroup[] = cfg.groups.map((def) => ({
-      ...def,
-      id: crypto.randomUUID(),
-    }))
+    const groups: PairGroup[] = cfg.groups.map((def) =>
+      hydrateGroup({ ...def, id: crypto.randomUUID() }),
+    )
     const a = breedable.find((e) => e.id === cfg.animalId)
     const pct = a ? Math.round(a.breed_proba! * 1000) / 10 : 4
     setSession((s) => ({ ...s, animalId: cfg.animalId, groups, currentPPct: pct }))
@@ -267,9 +292,15 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
             const a = breedable.find((e) => e.id === cfg.animalId)
             return (
               <div key={cfg.id} className="breed-order-config-chip">
-                <button className="small" onClick={() => loadConfig(cfg)} title={
-                  a ? `${a.name_fr ?? a.name_en} · ${cfg.groups.map(g => `${g.count}×Niv.${g.levelA}+${g.levelB}`).join(', ')}` : cfg.name
-                }>
+                <button
+                  className="small"
+                  onClick={() => loadConfig(cfg)}
+                  title={
+                    a
+                      ? `${a.name_fr ?? a.name_en} · ${cfg.groups.map((g) => `${g.count}×Niv.${g.levelA}+${g.levelB}`).join(', ')}`
+                      : cfg.name
+                  }
+                >
                   {cfg.name}
                 </button>
                 {session.animalId != null && (
@@ -303,13 +334,18 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                 placeholder="Nom de la config…"
                 value={saveName}
                 onChange={(e) => setSaveName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') saveConfig(); if (e.key === 'Escape') setShowSaveForm(false) }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveConfig()
+                  if (e.key === 'Escape') setShowSaveForm(false)
+                }}
                 autoFocus
               />
               <button className="small" onClick={saveConfig} disabled={!saveName.trim()}>
                 OK
               </button>
-              <button className="small link" onClick={() => setShowSaveForm(false)}>Annuler</button>
+              <button className="small link" onClick={() => setShowSaveForm(false)}>
+                Annuler
+              </button>
             </div>
           )}
         </div>
@@ -367,6 +403,8 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
               <div className="breed-order-reco-pair">
                 paire niv.&nbsp;{recommended.levelA}+{recommended.levelB}
                 {recommended.parkBonus && <span className="breed-order-park-badge">parc</span>}
+                {recommended.coinBoost && <span className="breed-order-boost-badge">Pièce</span>}
+                {recommended.adBoost && <span className="breed-order-boost-badge">Pub</span>}
                 {' '}→ offspring niv.&nbsp;
                 <strong>{offspringLevel(recommended.levelA, recommended.levelB)}</strong>
               </div>
@@ -384,34 +422,50 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                   </span>
                 </button>
               </div>
-              {(boost1Best || boost2Best) && (
+              {boostReco && (
                 <div className="breed-order-boost">
-                  <span className="breed-order-boost-label">Boosts :</span>
-                  {boost1Best && (
+                  <span className="breed-order-boost-label">Boosts non configurés :</span>
+                  {boostReco.sameGroup && boostReco.coin ? (
                     <div className="breed-order-boost-item">
                       <span className="muted">pièce ou pub</span>
                       {' → '}
                       <span>
-                        paire niv.&nbsp;{boost1Best.group.levelA}+{boost1Best.group.levelB}
-                        {boost1Best.group.parkBonus && (
+                        paire niv.&nbsp;{boostReco.coin.group.levelA}+{boostReco.coin.group.levelB}
+                        {boostReco.coin.group.parkBonus && (
                           <span className="breed-order-park-badge">parc</span>
                         )}
                       </span>
-                      <span className="breed-order-boost-delta">+{boost1Best.delta.toFixed(2)}</span>
-                    </div>
-                  )}
-                  {boost2Best && (
-                    <div className="breed-order-boost-item">
-                      <span className="muted">pièce + pub</span>
-                      {' → '}
-                      <span>
-                        paire niv.&nbsp;{boost2Best.group.levelA}+{boost2Best.group.levelB}
-                        {boost2Best.group.parkBonus && (
-                          <span className="breed-order-park-badge">parc</span>
-                        )}
+                      <span className="breed-order-boost-delta">
+                        +{boostReco.coin.delta.toFixed(2)}
                       </span>
-                      <span className="breed-order-boost-delta">+{boost2Best.delta.toFixed(2)}</span>
                     </div>
+                  ) : (
+                    <>
+                      {boostReco.coin && (
+                        <div className="breed-order-boost-item">
+                          <span className="muted">pièce</span>
+                          {' → '}
+                          <span>
+                            niv.&nbsp;{boostReco.coin.group.levelA}+{boostReco.coin.group.levelB}
+                          </span>
+                          <span className="breed-order-boost-delta">
+                            +{boostReco.coin.delta.toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                      {boostReco.ad && (
+                        <div className="breed-order-boost-item">
+                          <span className="muted">pub</span>
+                          {' → '}
+                          <span>
+                            niv.&nbsp;{boostReco.ad.group.levelA}+{boostReco.ad.group.levelB}
+                          </span>
+                          <span className="breed-order-boost-delta">
+                            +{boostReco.ad.delta.toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}
@@ -440,8 +494,11 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
               const offspring = offspringLevel(group.levelA, group.levelB)
               const isFirst = rank === 0
               const delta = v - bestValue
+              const configuredExtra =
+                (group.coinBoost ? pBase : 0) + (group.adBoost ? pBase : 0)
               const effectivePPct =
-                Math.min(1, currentP + (group.parkBonus ? parkBonusVal! : 0)) * 100
+                Math.min(1, currentP + (group.parkBonus ? parkBonusVal! : 0) + configuredExtra) *
+                100
               return (
                 <div key={group.id} className={`breed-order-pair${isFirst ? ' first' : ''}`}>
                   <span className="breed-order-rank">{isFirst ? '→' : `${rank + 1}.`}</span>
@@ -485,12 +542,28 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                       onChange={(e) => updateGroup(group.id, 'parkBonus', e.target.checked)}
                     />
                     Parc
-                    {group.parkBonus && (
-                      <span className="muted" style={{ fontSize: '0.75rem' }}>
-                        ({effectivePPct.toFixed(0)}%)
-                      </span>
-                    )}
                   </label>
+                  <label className="breed-order-boost-check admin-check">
+                    <input
+                      type="checkbox"
+                      checked={group.coinBoost}
+                      onChange={(e) => updateGroup(group.id, 'coinBoost', e.target.checked)}
+                    />
+                    Pièce
+                  </label>
+                  <label className="breed-order-boost-check admin-check">
+                    <input
+                      type="checkbox"
+                      checked={group.adBoost}
+                      onChange={(e) => updateGroup(group.id, 'adBoost', e.target.checked)}
+                    />
+                    Pub
+                  </label>
+                  {(group.parkBonus || group.coinBoost || group.adBoost) && (
+                    <span className="muted" style={{ fontSize: '0.75rem' }}>
+                      ({effectivePPct.toFixed(0)}%)
+                    </span>
+                  )}
                   <label className="breed-order-count-label">
                     <div className="breed-order-count">
                       <button
@@ -509,7 +582,9 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                     </div>
                   </label>
                   {dpValues.length > 0 && !isFirst && (
-                    <span className={`breed-order-val ${delta < -0.05 ? 'breed-order-val-loss' : 'muted'}`}>
+                    <span
+                      className={`breed-order-val ${delta < -0.05 ? 'breed-order-val-loss' : 'muted'}`}
+                    >
                       {delta.toFixed(2)}
                     </span>
                   )}

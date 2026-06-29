@@ -980,6 +980,20 @@ a {
   color: #6bcf7f;
   font-variant-numeric: tabular-nums;
 }
+.breed-order-boost-badge {
+  display: inline-block;
+  padding: 0 0.3rem;
+  font-size: 0.7rem;
+  border-radius: 3px;
+  background: #3a5a2a;
+  color: #8ecb74;
+  margin-left: 0.2rem;
+  vertical-align: middle;
+}
+.breed-order-boost-check {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
 .breeding-tabs {
   display: grid;
   gap: 1rem;
