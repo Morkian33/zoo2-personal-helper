@@ -72,9 +72,11 @@ function GroupId({ g }: { g: PairGroup }) {
 function BoostLine({
   label,
   item,
+  onApply,
 }: {
   label: string
   item: { group: PairGroup; delta: number }
+  onApply: () => void
 }) {
   return (
     <div className="breed-order-boost-item">
@@ -82,6 +84,7 @@ function BoostLine({
       {' → '}
       <span><GroupId g={item.group} /></span>
       <span className="breed-order-boost-delta">+{item.delta.toFixed(2)}</span>
+      <button className="small" onClick={onApply}>OK</button>
     </div>
   )
 }
@@ -477,11 +480,27 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                 <div className="breed-order-boost">
                   <span className="breed-order-boost-label">Boosts non configurés :</span>
                   {boostReco.sameGroup && boostReco.coin ? (
-                    <BoostLine label="pièce ou pub" item={boostReco.coin} />
+                    <BoostLine
+                      label="pièce ou pub"
+                      item={boostReco.coin}
+                      onApply={() => updateGroup(boostReco.coin!.group.id, 'coinBoost', true)}
+                    />
                   ) : (
                     <>
-                      {boostReco.coin && <BoostLine label="pièce" item={boostReco.coin} />}
-                      {boostReco.ad && <BoostLine label="pub" item={boostReco.ad} />}
+                      {boostReco.coin && (
+                        <BoostLine
+                          label="pièce"
+                          item={boostReco.coin}
+                          onApply={() => updateGroup(boostReco.coin!.group.id, 'coinBoost', true)}
+                        />
+                      )}
+                      {boostReco.ad && (
+                        <BoostLine
+                          label="pub"
+                          item={boostReco.ad}
+                          onApply={() => updateGroup(boostReco.ad!.group.id, 'adBoost', true)}
+                        />
+                      )}
                     </>
                   )}
                 </div>
