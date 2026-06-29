@@ -261,6 +261,62 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
     setShowSaveForm(false)
   }
 
+  // Apply a boost recommendation to a single pair.
+  // - count=1: apply directly on the group.
+  // - count>1: extract one pair into an existing compatible group (same levels +
+  //   boosts + park, with the new boost already set) or a fresh group of count=1.
+  function applyBoostToGroup(groupId: string, boostKey: 'coinBoost' | 'adBoost') {
+    setSession((s) => {
+      const target = s.groups.find((g) => g.id === groupId)
+      if (!target) return s
+
+      if (target.count === 1) {
+        return {
+          ...s,
+          groups: s.groups.map((g) => (g.id === groupId ? { ...g, [boostKey]: true } : g)),
+        }
+      }
+
+      // Build the config of the "boosted" pair we're splitting out.
+      const boostedCoin = boostKey === 'coinBoost' ? true : target.coinBoost
+      const boostedAd = boostKey === 'adBoost' ? true : target.adBoost
+
+      // Try to merge with an existing group that already has this exact config.
+      const match = s.groups.find(
+        (g) =>
+          g.id !== groupId &&
+          g.levelA === target.levelA &&
+          g.levelB === target.levelB &&
+          g.parkBonus === target.parkBonus &&
+          g.coinBoost === boostedCoin &&
+          g.adBoost === boostedAd,
+      )
+
+      let groups = s.groups.map((g) =>
+        g.id === groupId ? { ...g, count: g.count - 1 } : g,
+      )
+
+      if (match) {
+        groups = groups.map((g) => (g.id === match.id ? { ...g, count: g.count + 1 } : g))
+      } else {
+        groups = [
+          ...groups,
+          {
+            id: crypto.randomUUID(),
+            levelA: target.levelA,
+            levelB: target.levelB,
+            parkBonus: target.parkBonus,
+            coinBoost: boostedCoin,
+            adBoost: boostedAd,
+            count: 1,
+          },
+        ]
+      }
+
+      return { ...s, groups }
+    })
+  }
+
   function deleteConfig(id: string) {
     setConfigs(configs.filter((c) => c.id !== id))
   }
@@ -483,7 +539,7 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                     <BoostLine
                       label="pièce ou pub"
                       item={boostReco.coin}
-                      onApply={() => updateGroup(boostReco.coin!.group.id, 'coinBoost', true)}
+                      onApply={() => applyBoostToGroup(boostReco.coin!.group.id, 'coinBoost')}
                     />
                   ) : (
                     <>
@@ -491,14 +547,14 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                         <BoostLine
                           label="pièce"
                           item={boostReco.coin}
-                          onApply={() => updateGroup(boostReco.coin!.group.id, 'coinBoost', true)}
+                          onApply={() => applyBoostToGroup(boostReco.coin!.group.id, 'coinBoost')}
                         />
                       )}
                       {boostReco.ad && (
                         <BoostLine
                           label="pub"
                           item={boostReco.ad}
-                          onApply={() => updateGroup(boostReco.ad!.group.id, 'adBoost', true)}
+                          onApply={() => applyBoostToGroup(boostReco.ad!.group.id, 'adBoost')}
                         />
                       )}
                     </>
