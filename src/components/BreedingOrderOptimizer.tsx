@@ -91,12 +91,15 @@ function BoostLine({
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+type Strategy = 'births' | 'balance' | 'niveau'
+
 export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) {
   const [session, setSessionRaw] = useState<SessionState>(loadSession)
   const [configs, setConfigsRaw] = useState<BreedingConfig[]>(loadConfigs)
   const [search, setSearch] = useState('')
   const [saveName, setSaveName] = useState('')
   const [showSaveForm, setShowSaveForm] = useState(false)
+  const [strategy, setStrategy] = useState<Strategy>('balance')
 
   function setSession(fn: (s: SessionState) => SessionState) {
     setSessionRaw((prev) => {
@@ -128,13 +131,25 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
   const parkBonusVal = pBase != null ? pairParkBonus(pBase) : null
   const currentP = session.currentPPct / 100
 
+  const scoreOf = useMemo((): ((l: number) => number) => {
+    if (strategy === 'births') return (l) => 1 + 0.001 * l
+    if (strategy === 'niveau') {
+      const maxLevel =
+        session.groups.length > 0
+          ? Math.max(...session.groups.map((g) => offspringLevel(g.levelA, g.levelB)))
+          : 20
+      return (l) => (l === maxLevel ? 1 : 0) + 0.001 * l
+    }
+    return (l) => l
+  }, [strategy, session.groups])
+
   // DP ordering values (accounts for per-group configured boosts)
   const dpValues = useMemo(
     () =>
       pBase != null && session.groups.length > 0
-        ? analyseGroups(session.groups, currentP, pBase)
+        ? analyseGroups(session.groups, currentP, pBase, scoreOf)
         : [],
-    [session.groups, currentP, pBase],
+    [session.groups, currentP, pBase, scoreOf],
   )
 
   const ranked = useMemo(() => {
@@ -177,7 +192,7 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
             parkBonus: target.parkBonus, coinBoost: boostedCoin, adBoost: boostedAd, count: 1 },
         ]
       }
-      const vals = analyseGroups(boostedGroups, currentP, pBase)
+      const vals = analyseGroups(boostedGroups, currentP, pBase, scoreOf)
       return vals.length > 0 ? Math.max(...vals) : 0
     }
 
@@ -203,7 +218,7 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
       ad: bestAdGroup ? { group: bestAdGroup, delta: bestAdGain } : null,
       sameGroup: bestCoinGroup?.id === bestAdGroup?.id,
     }
-  }, [session.groups, currentP, pBase, dpValues, bestValue])
+  }, [session.groups, currentP, pBase, dpValues, bestValue, scoreOf])
 
   const totalPairs = session.groups.reduce((s, g) => s + g.count, 0)
 
@@ -511,6 +526,22 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                 title={`Seuil 2 paires : ${(crossover * 100).toFixed(0)}%`}
               />
             </div>
+          </div>
+
+          {/* Strategy selector */}
+          <div className="breed-order-strategy">
+            {(['births', 'balance', 'niveau'] as Strategy[]).map((s) => (
+              <label key={s} className={`breed-order-strategy-btn${strategy === s ? ' active' : ''}`}>
+                <input
+                  type="radio"
+                  name="breed-strategy"
+                  value={s}
+                  checked={strategy === s}
+                  onChange={() => setStrategy(s)}
+                />
+                {s === 'births' ? 'Naissances' : s === 'balance' ? 'Équilibre' : 'Niveau'}
+              </label>
+            ))}
           </div>
 
           {/* ── Recommendation (main action zone) ─────────────────────────── */}

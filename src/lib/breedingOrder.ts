@@ -54,6 +54,7 @@ export function analyseGroups(
   groups: PairGroup[],
   currentP: number,
   pBase: number,
+  scoreOf: (level: number) => number = (l) => l,
 ): number[] {
   if (groups.length === 0) return []
 
@@ -80,7 +81,7 @@ export function analyseGroups(
       const next = counts.slice()
       next[i]--
       const val =
-        ep * (levels[i] + dp(next, pBase)) + (1 - ep) * dp(next, Math.min(p + inc, 1))
+        ep * (scoreOf(levels[i]) + dp(next, pBase)) + (1 - ep) * dp(next, Math.min(p + inc, 1))
       if (val > best) best = val
     }
 
@@ -94,6 +95,6 @@ export function analyseGroups(
     const ep = Math.min(1, currentP + extraBoosts[i])
     const next = baseCounts.slice()
     next[i]--
-    return ep * (levels[i] + dp(next, pBase)) + (1 - ep) * dp(next, Math.min(currentP + inc, 1))
+    return ep * (scoreOf(levels[i]) + dp(next, pBase)) + (1 - ep) * dp(next, Math.min(currentP + inc, 1))
   })
 }

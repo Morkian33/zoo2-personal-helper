@@ -994,6 +994,29 @@ a {
   font-size: 0.82rem;
   color: var(--muted);
 }
+.breed-order-strategy {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+.breed-order-strategy-btn {
+  cursor: pointer;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.82rem;
+  background: transparent;
+  color: var(--muted);
+  user-select: none;
+}
+.breed-order-strategy-btn input {
+  display: none;
+}
+.breed-order-strategy-btn.active {
+  background: var(--accent, #4a8a6a);
+  color: #fff;
+  border-color: var(--accent, #4a8a6a);
+}
 .breeding-tabs {
   display: grid;
   gap: 1rem;
