@@ -83,7 +83,7 @@ function BoostLine({
       <span className="muted">{label}</span>
       {' → '}
       <span><GroupId g={item.group} /></span>
-      <span className="breed-order-boost-delta">+{item.delta.toFixed(2)}</span>
+      <span className="breed-order-boost-delta">+{item.delta.toFixed(3)}</span>
       <button className="small" onClick={onApply}>OK</button>
     </div>
   )
