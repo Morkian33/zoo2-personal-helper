@@ -153,41 +153,48 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
   const recommended = ranked[0]?.g ?? null
   const bestValue = ranked[0]?.v ?? 0
 
-  // Boost recommendation: for each group, the marginal gain from adding 1 more
-  // boost (coin or ad) on top of whatever is already configured.
-  // Primary sort: gain = min(pBase, 1 - ep) × offspring_level (proportional to
-  //   offspring level when no cap — provably optimal).
-  // Tie-break: prefer the group with the highest already-configured ep (park +
-  //   boosts).  Concentrating boosts on one high-ep group maximises the expected
-  //   value of the first validation step via the pity system.
+  // Boost recommendation: full DP recalculation — for each candidate group,
+  // simulate applying the boost (splitting one pair if count > 1) and rerun
+  // analyseGroups.  delta = max(new dp values) − bestValue.  This captures
+  // pity-order effects that the simple `pBase × offspring` formula misses.
   const boostReco = useMemo(() => {
-    if (!pBase || session.groups.length === 0) return null
-    const pkBonus = pairParkBonus(pBase)
+    if (!pBase || session.groups.length === 0 || dpValues.length === 0) return null
+
+    const getBoostedValue = (groupId: string, boostKey: 'coinBoost' | 'adBoost'): number => {
+      const target = session.groups.find((g) => g.id === groupId)
+      if (!target) return 0
+      const boostedCoin = boostKey === 'coinBoost' ? true : target.coinBoost
+      const boostedAd = boostKey === 'adBoost' ? true : target.adBoost
+      let boostedGroups: PairGroup[]
+      if (target.count === 1) {
+        boostedGroups = session.groups.map((g) =>
+          g.id === groupId ? { ...g, coinBoost: boostedCoin, adBoost: boostedAd } : g,
+        )
+      } else {
+        boostedGroups = [
+          ...session.groups.map((g) => (g.id === groupId ? { ...g, count: g.count - 1 } : g)),
+          { id: 'tmp', levelA: target.levelA, levelB: target.levelB,
+            parkBonus: target.parkBonus, coinBoost: boostedCoin, adBoost: boostedAd, count: 1 },
+        ]
+      }
+      const vals = analyseGroups(boostedGroups, currentP, pBase)
+      return vals.length > 0 ? Math.max(...vals) : 0
+    }
 
     let bestCoinGroup: PairGroup | null = null
     let bestCoinGain = 0.005  // min threshold to show
-    let bestCoinEp = -1       // tie-break: highest ep wins
     let bestAdGroup: PairGroup | null = null
     let bestAdGain = 0.005
-    let bestAdEp = -1
 
     for (const g of session.groups) {
-      const bonusI = (g.parkBonus ? pkBonus : 0)
-      const configuredExtra = (g.coinBoost ? pBase : 0) + (g.adBoost ? pBase : 0)
-      const currentEp = Math.min(1, currentP + bonusI + configuredExtra)
-      const gain = (Math.min(1, currentEp + pBase) - currentEp) * offspringLevel(g.levelA, g.levelB)
-      // configuredEp = park + boosts only (excludes pity), used as tie-break
-      const configuredEp = bonusI + configuredExtra
-
-      const coinBetter =
-        !g.coinBoost &&
-        (gain > bestCoinGain + 1e-9 || (Math.abs(gain - bestCoinGain) < 1e-9 && configuredEp > bestCoinEp))
-      if (coinBetter) { bestCoinGain = gain; bestCoinEp = configuredEp; bestCoinGroup = g }
-
-      const adBetter =
-        !g.adBoost &&
-        (gain > bestAdGain + 1e-9 || (Math.abs(gain - bestAdGain) < 1e-9 && configuredEp > bestAdEp))
-      if (adBetter) { bestAdGain = gain; bestAdEp = configuredEp; bestAdGroup = g }
+      if (!g.coinBoost) {
+        const gain = getBoostedValue(g.id, 'coinBoost') - bestValue
+        if (gain > bestCoinGain + 1e-9) { bestCoinGain = gain; bestCoinGroup = g }
+      }
+      if (!g.adBoost) {
+        const gain = getBoostedValue(g.id, 'adBoost') - bestValue
+        if (gain > bestAdGain + 1e-9) { bestAdGain = gain; bestAdGroup = g }
+      }
     }
 
     if (!bestCoinGroup && !bestAdGroup) return null
@@ -196,7 +203,7 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
       ad: bestAdGroup ? { group: bestAdGroup, delta: bestAdGain } : null,
       sameGroup: bestCoinGroup?.id === bestAdGroup?.id,
     }
-  }, [session.groups, currentP, pBase])
+  }, [session.groups, currentP, pBase, dpValues, bestValue])
 
   const totalPairs = session.groups.reduce((s, g) => s + g.count, 0)
 
