@@ -72,10 +72,12 @@ function GroupId({ g }: { g: PairGroup }) {
 function BoostLine({
   label,
   item,
+  deltaLabel,
   onApply,
 }: {
   label: string
   item: { group: PairGroup; delta: number }
+  deltaLabel: string
   onApply: () => void
 }) {
   return (
@@ -83,7 +85,7 @@ function BoostLine({
       <span className="muted">{label}</span>
       {' → '}
       <span><GroupId g={item.group} /></span>
-      <span className="breed-order-boost-delta">+{item.delta.toFixed(3)}</span>
+      <span className="breed-order-boost-delta">{deltaLabel}</span>
       <button className="small" onClick={onApply}>OK</button>
     </div>
   )
@@ -577,6 +579,7 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                     <BoostLine
                       label="pièce ou pub"
                       item={boostReco.coin}
+                      deltaLabel={bestValue > 0 ? `+${(boostReco.coin.delta / bestValue * 100).toFixed(1)}%` : '+?%'}
                       onApply={() => applyBoostToGroup(boostReco.coin!.group.id, 'coinBoost')}
                     />
                   ) : (
@@ -585,6 +588,7 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                         <BoostLine
                           label="pièce"
                           item={boostReco.coin}
+                          deltaLabel={bestValue > 0 ? `+${(boostReco.coin.delta / bestValue * 100).toFixed(1)}%` : '+?%'}
                           onApply={() => applyBoostToGroup(boostReco.coin!.group.id, 'coinBoost')}
                         />
                       )}
@@ -592,6 +596,7 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                         <BoostLine
                           label="pub"
                           item={boostReco.ad}
+                          deltaLabel={bestValue > 0 ? `+${(boostReco.ad.delta / bestValue * 100).toFixed(1)}%` : '+?%'}
                           onApply={() => applyBoostToGroup(boostReco.ad!.group.id, 'adBoost')}
                         />
                       )}
@@ -717,9 +722,14 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                   {dpValues.length > 0 && rank >= 0 && (
                     isFirst
                       ? <span className="breed-order-val muted">ε&nbsp;{bestValue.toFixed(2)}</span>
-                      : <span className={`breed-order-val ${delta < -0.05 ? 'breed-order-val-loss' : 'muted'}`}>
-                          {delta.toFixed(2)}
-                        </span>
+                      : (() => {
+                          const pct = bestValue !== 0 ? (delta / bestValue * 100) : 0
+                          return (
+                            <span className={`breed-order-val ${pct < -1 ? 'breed-order-val-loss' : 'muted'}`}>
+                              {pct.toFixed(1)}%
+                            </span>
+                          )
+                        })()
                   )}
                   <button className="small link" onClick={() => removeGroup(group.id)}>
                     ×
