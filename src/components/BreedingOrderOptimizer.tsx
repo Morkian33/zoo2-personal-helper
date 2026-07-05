@@ -294,14 +294,6 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
       const target = s.groups.find((g) => g.id === groupId)
       if (!target) return s
 
-      if (target.count === 1) {
-        return {
-          ...s,
-          groups: s.groups.map((g) => (g.id === groupId ? { ...g, [boostKey]: true } : g)),
-        }
-      }
-
-      // Build the config of the "boosted" pair we're splitting out.
       const boostedCoin = boostKey === 'coinBoost' ? true : target.coinBoost
       const boostedAd = boostKey === 'adBoost' ? true : target.adBoost
 
@@ -316,6 +308,25 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
           g.adBoost === boostedAd,
       )
 
+      if (target.count === 1) {
+        if (match) {
+          // Last individual: move into the matching group and remove this one.
+          return {
+            ...s,
+            groups: s.groups
+              .filter((g) => g.id !== groupId)
+              .map((g) => (g.id === match.id ? { ...g, count: g.count + 1 } : g)),
+          }
+        }
+        return {
+          ...s,
+          groups: s.groups.map((g) =>
+            g.id === groupId ? { ...g, coinBoost: boostedCoin, adBoost: boostedAd } : g,
+          ),
+        }
+      }
+
+      // count > 1: decrement source, then merge or create boosted group.
       let groups = s.groups.map((g) =>
         g.id === groupId ? { ...g, count: g.count - 1 } : g,
       )
