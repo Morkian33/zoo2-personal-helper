@@ -218,7 +218,6 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
     return {
       coin: bestCoinGroup ? { group: bestCoinGroup, delta: bestCoinGain } : null,
       ad: bestAdGroup ? { group: bestAdGroup, delta: bestAdGain } : null,
-      sameGroup: bestCoinGroup?.id === bestAdGroup?.id,
     }
   }, [session.groups, currentP, pBase, dpValues, bestValue, scoreOf])
 
@@ -586,32 +585,21 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
               {boostReco && (
                 <div className="breed-order-boost">
                   <span className="breed-order-boost-label">Boosts non configurés :</span>
-                  {boostReco.sameGroup && boostReco.coin ? (
+                  {boostReco.coin && (
                     <BoostLine
-                      label="pièce ou pub"
+                      label="pièce"
                       item={boostReco.coin}
                       deltaLabel={bestValue > 0 ? `+${(boostReco.coin.delta / bestValue * 100).toFixed(1)}%` : '+?%'}
                       onApply={() => applyBoostToGroup(boostReco.coin!.group.id, 'coinBoost')}
                     />
-                  ) : (
-                    <>
-                      {boostReco.coin && (
-                        <BoostLine
-                          label="pièce"
-                          item={boostReco.coin}
-                          deltaLabel={bestValue > 0 ? `+${(boostReco.coin.delta / bestValue * 100).toFixed(1)}%` : '+?%'}
-                          onApply={() => applyBoostToGroup(boostReco.coin!.group.id, 'coinBoost')}
-                        />
-                      )}
-                      {boostReco.ad && (
-                        <BoostLine
-                          label="pub"
-                          item={boostReco.ad}
-                          deltaLabel={bestValue > 0 ? `+${(boostReco.ad.delta / bestValue * 100).toFixed(1)}%` : '+?%'}
-                          onApply={() => applyBoostToGroup(boostReco.ad!.group.id, 'adBoost')}
-                        />
-                      )}
-                    </>
+                  )}
+                  {boostReco.ad && (
+                    <BoostLine
+                      label="pub"
+                      item={boostReco.ad}
+                      deltaLabel={bestValue > 0 ? `+${(boostReco.ad.delta / bestValue * 100).toFixed(1)}%` : '+?%'}
+                      onApply={() => applyBoostToGroup(boostReco.ad!.group.id, 'adBoost')}
+                    />
                   )}
                 </div>
               )}
