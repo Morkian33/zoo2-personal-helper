@@ -5,6 +5,7 @@ import {
   breedingOrderCrossover,
   nextProbability,
   analyseGroups,
+  expectedOutcomes,
   pairParkBonus,
   type PairGroup,
   type BreedingConfig,
@@ -151,6 +152,15 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
       pBase != null && session.groups.length > 0
         ? analyseGroups(session.groups, currentP, pBase, scoreOf)
         : [],
+    [session.groups, currentP, pBase, scoreOf],
+  )
+
+  // Expected session outcome under the selected strategy's optimal ordering.
+  const outcomes = useMemo(
+    () =>
+      pBase != null && session.groups.length > 0
+        ? expectedOutcomes(session.groups, currentP, pBase, scoreOf)
+        : null,
     [session.groups, currentP, pBase, scoreOf],
   )
 
@@ -555,6 +565,22 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
               </label>
             ))}
           </div>
+
+          {/* Expected outcome of the whole session under this strategy */}
+          {outcomes && (
+            <div className="breed-order-expect">
+              <div className="breed-order-expect-item">
+                <span className="breed-order-expect-val">{outcomes.births.toFixed(2)}</span>
+                <span className="breed-order-expect-lbl">naissances attendues</span>
+              </div>
+              <div className="breed-order-expect-item">
+                <span className="breed-order-expect-val">{outcomes.maxLevelBirths.toFixed(2)}</span>
+                <span className="breed-order-expect-lbl">
+                  dont niv.&nbsp;{outcomes.maxLevel} (max)
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* ── Recommendation (main action zone) ─────────────────────────── */}
           {totalPairs > 0 && recommended ? (

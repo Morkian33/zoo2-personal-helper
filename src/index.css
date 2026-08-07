@@ -1017,6 +1017,28 @@ a {
   color: #fff;
   border-color: var(--accent, #4a8a6a);
 }
+.breed-order-expect {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.breed-order-expect-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+.breed-order-expect-val {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.breed-order-expect-lbl {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
 .breeding-tabs {
   display: grid;
   gap: 1rem;
