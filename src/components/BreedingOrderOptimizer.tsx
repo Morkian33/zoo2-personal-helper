@@ -70,15 +70,26 @@ function GroupId({ g }: { g: PairGroup }) {
   )
 }
 
+// Signed, 2-decimal delta on one of the reported expectations.
+function DeltaValue({ v, unit }: { v: number; unit: string }) {
+  const cls = v > 0.005 ? ' pos' : v < -0.005 ? ' neg' : ''
+  return (
+    <span className={`breed-order-boost-delta${cls}`}>
+      {v >= 0 ? '+' : '−'}
+      {Math.abs(v).toFixed(2)} {unit}
+    </span>
+  )
+}
+
 function BoostLine({
   label,
   item,
-  deltaLabel,
+  maxLevel,
   onApply,
 }: {
   label: string
-  item: { group: PairGroup; delta: number }
-  deltaLabel: string
+  item: { group: PairGroup; dBirths: number; dMaxLevel: number }
+  maxLevel: number
   onApply: () => void
 }) {
   return (
@@ -86,7 +97,8 @@ function BoostLine({
       <span className="muted">{label}</span>
       {' → '}
       <span><GroupId g={item.group} /></span>
-      <span className="breed-order-boost-delta">{deltaLabel}</span>
+      <DeltaValue v={item.dBirths} unit="naiss." />
+      <DeltaValue v={item.dMaxLevel} unit={`niv. ${maxLevel}`} />
       <button className="small" onClick={onApply}>OK</button>
     </div>
   )
@@ -95,6 +107,25 @@ function BoostLine({
 // ── Component ─────────────────────────────────────────────────────────────────
 
 type Strategy = 'births' | 'balance' | 'niveau'
+
+const STRATEGIES: Strategy[] = ['births', 'balance', 'niveau']
+
+const STRATEGY_LABEL: Record<Strategy, string> = {
+  births: 'Naissances',
+  balance: 'Équilibre',
+  niveau: 'Niveau',
+}
+
+// Per-strategy scoring of one offspring. The small `0.001 * l` terms are
+// tie-breakers, not objectives: they only order plays that are equivalent for
+// the primary criterion.
+function makeScoreOf(strategy: Strategy, groups: PairGroup[]): (l: number) => number {
+  if (strategy === 'balance') return (l) => l
+  if (strategy === 'births') return (l) => 1 + 0.001 * l
+  const maxLevel =
+    groups.length > 0 ? Math.max(...groups.map((g) => offspringLevel(g.levelA, g.levelB))) : 20
+  return (l) => (l === maxLevel ? 1 : 0) + 0.001 * l
+}
 
 export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) {
   const [session, setSessionRaw] = useState<SessionState>(loadSession)
@@ -134,17 +165,10 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
   const parkBonusVal = pBase != null ? pairParkBonus(pBase) : null
   const currentP = session.currentPPct / 100
 
-  const scoreOf = useMemo((): ((l: number) => number) => {
-    if (strategy === 'births') return (l) => 1 + 0.001 * l
-    if (strategy === 'niveau') {
-      const maxLevel =
-        session.groups.length > 0
-          ? Math.max(...session.groups.map((g) => offspringLevel(g.levelA, g.levelB)))
-          : 20
-      return (l) => (l === maxLevel ? 1 : 0) + 0.001 * l
-    }
-    return (l) => l
-  }, [strategy, session.groups])
+  const scoreOf = useMemo(
+    () => makeScoreOf(strategy, session.groups),
+    [strategy, session.groups],
+  )
 
   // DP ordering values (accounts for per-group configured boosts)
   const dpValues = useMemo(
@@ -155,14 +179,17 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
     [session.groups, currentP, pBase, scoreOf],
   )
 
-  // Expected session outcome under the selected strategy's optimal ordering.
-  const outcomes = useMemo(
-    () =>
-      pBase != null && session.groups.length > 0
-        ? expectedOutcomes(session.groups, currentP, pBase, scoreOf)
-        : null,
-    [session.groups, currentP, pBase, scoreOf],
-  )
+  // Expected session outcome under each strategy's own optimal ordering, so the
+  // trade-off between total births and max-level births is visible at a glance.
+  const outcomesByStrategy = useMemo(() => {
+    if (pBase == null || session.groups.length === 0) return null
+    return STRATEGIES.map((s) => ({
+      strategy: s,
+      ...expectedOutcomes(session.groups, currentP, pBase, makeScoreOf(s, session.groups)),
+    }))
+  }, [session.groups, currentP, pBase])
+
+  const outcomes = outcomesByStrategy?.find((o) => o.strategy === strategy) ?? null
 
   const ranked = useMemo(() => {
     if (dpValues.length === 0) return session.groups.map((g, i) => ({ g, i, v: -Infinity }))
@@ -181,15 +208,16 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
   const bestValue = ranked[0]?.v ?? 0
 
   // Boost recommendation: full DP recalculation — for each candidate group,
-  // simulate applying the boost (splitting one pair if count > 1) and rerun
-  // analyseGroups.  delta = max(new dp values) − bestValue.  This captures
-  // pity-order effects that the simple `pBase × offspring` formula misses.
+  // simulate applying the boost (splitting one pair if count > 1) and rerun the
+  // DP.  The pick is ranked on the score delta (which captures pity-order
+  // effects the simple `pBase × offspring` formula misses), but what we show is
+  // the impact on the two reported expectations.
   const boostReco = useMemo(() => {
-    if (!pBase || session.groups.length === 0 || dpValues.length === 0) return null
+    if (!pBase || session.groups.length === 0 || !outcomes) return null
 
-    const getBoostedValue = (groupId: string, boostKey: 'coinBoost' | 'adBoost'): number => {
+    const getBoostedOutcomes = (groupId: string, boostKey: 'coinBoost' | 'adBoost') => {
       const target = session.groups.find((g) => g.id === groupId)
-      if (!target) return 0
+      if (!target) return null
       const boostedCoin = boostKey === 'coinBoost' ? true : target.coinBoost
       const boostedAd = boostKey === 'adBoost' ? true : target.adBoost
       let boostedGroups: PairGroup[]
@@ -204,32 +232,37 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
             parkBonus: target.parkBonus, coinBoost: boostedCoin, adBoost: boostedAd, count: 1 },
         ]
       }
-      const vals = analyseGroups(boostedGroups, currentP, pBase, scoreOf)
-      return vals.length > 0 ? Math.max(...vals) : 0
+      // Boosts never change offspring levels, so the boosted run is directly
+      // comparable to `outcomes` (same scoreOf, same maxLevel).
+      return expectedOutcomes(boostedGroups, currentP, pBase, scoreOf)
     }
 
-    let bestCoinGroup: PairGroup | null = null
-    let bestCoinGain = 0.005  // min threshold to show
-    let bestAdGroup: PairGroup | null = null
-    let bestAdGain = 0.005
+    type Candidate = { group: PairGroup; delta: number; dBirths: number; dMaxLevel: number }
+    const MIN_GAIN = 0.005  // min score gain to bother showing
+    let coin: Candidate | null = null
+    let ad: Candidate | null = null
+
+    const consider = (g: PairGroup, boostKey: 'coinBoost' | 'adBoost', current: Candidate | null) => {
+      const bo = getBoostedOutcomes(g.id, boostKey)
+      if (!bo) return current
+      const delta = bo.score - outcomes.score
+      if (delta < MIN_GAIN || (current && delta <= current.delta + 1e-9)) return current
+      return {
+        group: g,
+        delta,
+        dBirths: bo.births - outcomes.births,
+        dMaxLevel: bo.maxLevelBirths - outcomes.maxLevelBirths,
+      }
+    }
 
     for (const g of session.groups) {
-      if (!g.coinBoost) {
-        const gain = getBoostedValue(g.id, 'coinBoost') - bestValue
-        if (gain > bestCoinGain + 1e-9) { bestCoinGain = gain; bestCoinGroup = g }
-      }
-      if (!g.adBoost) {
-        const gain = getBoostedValue(g.id, 'adBoost') - bestValue
-        if (gain > bestAdGain + 1e-9) { bestAdGain = gain; bestAdGroup = g }
-      }
+      if (!g.coinBoost) coin = consider(g, 'coinBoost', coin)
+      if (!g.adBoost) ad = consider(g, 'adBoost', ad)
     }
 
-    if (!bestCoinGroup && !bestAdGroup) return null
-    return {
-      coin: bestCoinGroup ? { group: bestCoinGroup, delta: bestCoinGain } : null,
-      ad: bestAdGroup ? { group: bestAdGroup, delta: bestAdGain } : null,
-    }
-  }, [session.groups, currentP, pBase, dpValues, bestValue, scoreOf])
+    if (!coin && !ad) return null
+    return { coin, ad }
+  }, [session.groups, currentP, pBase, outcomes, scoreOf])
 
   const totalPairs = session.groups.reduce((s, g) => s + g.count, 0)
 
@@ -550,35 +583,60 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
             </div>
           </div>
 
-          {/* Strategy selector */}
-          <div className="breed-order-strategy">
-            {(['births', 'balance', 'niveau'] as Strategy[]).map((s) => (
-              <label key={s} className={`breed-order-strategy-btn${strategy === s ? ' active' : ''}`}>
-                <input
-                  type="radio"
-                  name="breed-strategy"
-                  value={s}
-                  checked={strategy === s}
-                  onChange={() => setStrategy(s)}
-                />
-                {s === 'births' ? 'Naissances' : s === 'balance' ? 'Équilibre' : 'Niveau'}
-              </label>
-            ))}
-          </div>
-
-          {/* Expected outcome of the whole session under this strategy */}
-          {outcomes && (
-            <div className="breed-order-expect">
-              <div className="breed-order-expect-item">
-                <span className="breed-order-expect-val">{outcomes.births.toFixed(2)}</span>
-                <span className="breed-order-expect-lbl">naissances attendues</span>
-              </div>
-              <div className="breed-order-expect-item">
-                <span className="breed-order-expect-val">{outcomes.maxLevelBirths.toFixed(2)}</span>
-                <span className="breed-order-expect-lbl">
-                  dont niv.&nbsp;{outcomes.maxLevel} (max)
-                </span>
-              </div>
+          {/* Strategy selector + expected outcome of the whole session under
+              each strategy, so the births / max-level trade-off is visible
+              without switching tabs. */}
+          {outcomesByStrategy ? (
+            <table className="breed-order-expect">
+              <thead>
+                <tr>
+                  <th>Stratégie</th>
+                  <th>Naissances</th>
+                  <th>dont niv.&nbsp;{outcomesByStrategy[0].maxLevel}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {outcomesByStrategy.map((o) => (
+                  <tr
+                    key={o.strategy}
+                    className={o.strategy === strategy ? 'active' : undefined}
+                    onClick={() => setStrategy(o.strategy)}
+                  >
+                    <td>
+                      <label className="breed-order-expect-name">
+                        <input
+                          type="radio"
+                          name="breed-strategy"
+                          value={o.strategy}
+                          checked={o.strategy === strategy}
+                          onChange={() => setStrategy(o.strategy)}
+                        />
+                        {STRATEGY_LABEL[o.strategy]}
+                      </label>
+                    </td>
+                    <td className="breed-order-expect-val">{o.births.toFixed(2)}</td>
+                    <td className="breed-order-expect-val">{o.maxLevelBirths.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="breed-order-strategy">
+              {STRATEGIES.map((s) => (
+                <label
+                  key={s}
+                  className={`breed-order-strategy-btn${strategy === s ? ' active' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="breed-strategy"
+                    value={s}
+                    checked={strategy === s}
+                    onChange={() => setStrategy(s)}
+                  />
+                  {STRATEGY_LABEL[s]}
+                </label>
+              ))}
             </div>
           )}
 
@@ -615,7 +673,7 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                     <BoostLine
                       label="pièce"
                       item={boostReco.coin}
-                      deltaLabel={bestValue > 0 ? `+${(boostReco.coin.delta / bestValue * 100).toFixed(1)}%` : '+?%'}
+                      maxLevel={outcomes!.maxLevel}
                       onApply={() => applyBoostToGroup(boostReco.coin!.group.id, 'coinBoost')}
                     />
                   )}
@@ -623,7 +681,7 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                     <BoostLine
                       label="pub"
                       item={boostReco.ad}
-                      deltaLabel={bestValue > 0 ? `+${(boostReco.ad.delta / bestValue * 100).toFixed(1)}%` : '+?%'}
+                      maxLevel={outcomes!.maxLevel}
                       onApply={() => applyBoostToGroup(boostReco.ad!.group.id, 'adBoost')}
                     />
                   )}

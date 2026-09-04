@@ -977,8 +977,15 @@ a {
 }
 .breed-order-boost-delta {
   font-weight: 600;
-  color: #6bcf7f;
+  color: var(--muted);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.breed-order-boost-delta.pos {
+  color: #6bcf7f;
+}
+.breed-order-boost-delta.neg {
+  color: #e0736b;
 }
 .breed-order-boost-badge {
   display: inline-block;
@@ -1017,27 +1024,51 @@ a {
   color: #fff;
   border-color: var(--accent, #4a8a6a);
 }
-.breed-order-expect {
-  display: flex;
-  gap: 1.5rem;
-  flex-wrap: wrap;
+table.breed-order-expect {
+  width: 100%;
+  border-collapse: collapse;
   margin-bottom: 0.75rem;
-  padding: 0.45rem 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  font-size: 0.85rem;
 }
-.breed-order-expect-item {
+table.breed-order-expect th {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-align: right;
+  padding: 0.15rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+table.breed-order-expect th:first-child {
+  text-align: left;
+}
+table.breed-order-expect td {
+  padding: 0.25rem 0.5rem;
+  text-align: right;
+}
+table.breed-order-expect td:first-child {
+  text-align: left;
+}
+table.breed-order-expect tbody tr {
+  cursor: pointer;
+}
+table.breed-order-expect tbody tr.active {
+  background: color-mix(in srgb, var(--accent, #4a8a6a) 18%, transparent);
+}
+.breed-order-expect-name {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.35rem;
+  cursor: pointer;
+  color: var(--muted);
+  user-select: none;
 }
-.breed-order-expect-val {
-  font-size: 1.05rem;
+table.breed-order-expect tbody tr.active .breed-order-expect-name {
+  color: inherit;
   font-weight: 600;
 }
-.breed-order-expect-lbl {
-  font-size: 0.8rem;
-  color: var(--muted);
+.breed-order-expect-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 .breeding-tabs {
   display: grid;

@@ -51,6 +51,7 @@ export interface BreedingConfig {
 // To find the optimal first pick: take argmax of the returned array.
 
 export interface ExpectedOutcomes {
+  score: number         // DP value of the optimal play (same units as analyseGroups)
   births: number        // expected number of successful breedings
   maxLevelBirths: number // expected number of offspring at maxLevel
   maxLevel: number      // best offspring level reachable with the current pairs
@@ -66,7 +67,7 @@ export function expectedOutcomes(
   pBase: number,
   scoreOf: (level: number) => number = (l) => l,
 ): ExpectedOutcomes {
-  if (groups.length === 0) return { births: 0, maxLevelBirths: 0, maxLevel: 0 }
+  if (groups.length === 0) return { score: 0, births: 0, maxLevelBirths: 0, maxLevel: 0 }
 
   const inc = Math.min(pBase, 0.1)
   const parkBonus = pairParkBonus(pBase)
@@ -108,8 +109,8 @@ export function expectedOutcomes(
     return result
   }
 
-  const [, births, maxLevelBirths] = dp(groups.map((g) => g.count), currentP)
-  return { births, maxLevelBirths, maxLevel }
+  const [score, births, maxLevelBirths] = dp(groups.map((g) => g.count), currentP)
+  return { score, births, maxLevelBirths, maxLevel }
 }
 
 export function analyseGroups(
