@@ -63,24 +63,6 @@ export function TranslationsPanel({
       <h2>Libellés FR</h2>
       {status && <p className="status">{status}</p>}
 
-      <h3>Biomes</h3>
-      <div className="admin-form">
-        {biomes.map((b) => (
-          <label key={b}>
-            {b}
-            <input
-              value={biomeDraft[b] ?? ''}
-              onChange={(e) => setBiomeDraft((d) => ({ ...d, [b]: e.target.value }))}
-              onBlur={() =>
-                setBiomeLabel(b, biomeDraft[b])
-                  .then(() => flash(`Biome « ${b} » enregistré`))
-                  .catch((e) => flash('Erreur : ' + (e instanceof Error ? e.message : '')))
-              }
-            />
-          </label>
-        ))}
-      </div>
-
       <div className="filters">
         <input
           type="search"
@@ -144,6 +126,25 @@ export function TranslationsPanel({
           </label>
         ))}
       </div>
+
+      <h3>Biomes</h3>
+      <div className="admin-form">
+        {biomes.map((b) => (
+          <label key={b}>
+            {b}
+            <input
+              value={biomeDraft[b] ?? ''}
+              onChange={(e) => setBiomeDraft((d) => ({ ...d, [b]: e.target.value }))}
+              onBlur={() =>
+                setBiomeLabel(b, biomeDraft[b])
+                  .then(() => flash(`Biome « ${b} » enregistré`))
+                  .catch((e) => flash('Erreur : ' + (e instanceof Error ? e.message : '')))
+              }
+            />
+          </label>
+        ))}
+      </div>
+
       <p className="muted">Les libellés mis à jour s'appliquent partout après un rechargement de l'app.</p>
     </div>
   )
