@@ -1,11 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import { canBreed, hasBreedingShelter } from '../lib/catalog'
+import { canBreed } from '../lib/catalog'
 import { norm } from '../lib/format'
 import type { AnimalEntry, ShelterLevels } from '../lib/types'
 import type { CollectionRow, CollectionRequirementRow } from '../lib/collections'
 
 type Filter = 'all' | 'reachable'
 type Status = 'complete' | 'reachable' | 'blocked'
+
+// What you must do next on a requirement, given that levelling an animal in the
+// game consumes two individuals of the same species:
+//  - 'level'  : you already own a pair, so you can raise its level
+//  - 'second' : you own exactly one, so you need a second one before levelling
+//  - 'obtain' : you own none, so you need two
+type ReqAction = 'level' | 'second' | 'obtain'
 
 // One recommended action toward completing collections.
 interface Rec {
@@ -16,7 +23,7 @@ interface Rec {
   cols: number // how many collections this advances
   completes: number // how many it would outright complete
   score: number
-  owned: boolean
+  action: ReqAction
 }
 
 const HIDE_DONE_KEY = 'zoo2.collections.hideDone'
@@ -72,35 +79,39 @@ export function CollectionsView({
     return { animalById, variantMax, reqsByCol }
   }, [entries, requirements])
 
-  // For a requirement: your level, whether it's met, and whether the species is
-  // breedable (so you can raise/produce it — needed to level up, per the game).
+  // For a requirement: your level, whether it's met, what you must do next
+  // (own a pair before you can level up) and whether the species is actually
+  // breedable right now (pair owned + shelter high enough).
   function reqInfo(r: CollectionRequirementRow): {
     label: string
     your: number | null
     met: boolean
     breedable: boolean
-    obtainable: boolean
+    action: ReqAction
   } {
     const a = animalById.get(r.animal_id)
+    // Levelling needs two individuals of the species, whatever their coats.
+    const pair = !!a && a.owned_count >= 2
     if (r.variant_id != null) {
       const v = variantMax.get(r.variant_id)
       const your = v?.max ?? null
       const met = your != null && your >= r.required_level
       // A variant you don't own can't be produced by breeding the base species —
       // it must be obtained first (event/quest). Only count it as workable once
-      // you own it (then you can breed it up to the required level).
-      const obtainable = !!v?.owned
-      const breedable = obtainable && (a ? hasBreedingShelter(a, shelters) : false)
-      return { label: v?.label ?? '(variant ?)', your, met, breedable, obtainable }
+      // you own it and have a pair to breed with.
+      const owned = !!v?.owned
+      const action: ReqAction = !owned ? 'obtain' : pair ? 'level' : 'second'
+      const breedable = owned && (a ? canBreed(a, shelters) : false)
+      return { label: v?.label ?? '(variant ?)', your, met, breedable, action }
     }
-    const breedable = a ? canBreed(a, shelters) : false
     const your = a?.max_level ?? null
+    const count = a?.owned_count ?? 0
     return {
       label: a ? (a.name_fr ?? a.name_en) : '(animal ?)',
       your,
       met: your != null && your >= r.required_level,
-      breedable,
-      obtainable: !!a && a.owned_count > 0,
+      breedable: a ? canBreed(a, shelters) : false,
+      action: count >= 2 ? 'level' : count === 1 ? 'second' : 'obtain',
     }
   }
 
@@ -108,7 +119,7 @@ export function CollectionsView({
   // collection advancement. Each unmet requirement contributes 1/missing to its
   // target, so the last missing piece of a collection weighs a full point and
   // items needed by several near-complete collections rise to the top.
-  const { levelUp, unlock } = useMemo(() => {
+  const { levelUp, needSecond, unlock } = useMemo(() => {
     const acc = new Map<string, Rec>()
     for (const c of collections) {
       const reqs = reqsByCol.get(c.id) ?? []
@@ -129,7 +140,7 @@ export function CollectionsView({
             cols: 0,
             completes: 0,
             score: 0,
-            owned: info.obtainable,
+            action: info.action,
           }
           acc.set(key, e)
         }
@@ -143,8 +154,9 @@ export function CollectionsView({
       b.score - a.score || b.completes - a.completes || b.cols - a.cols
     const arr = [...acc.values()]
     return {
-      levelUp: arr.filter((e) => e.owned).sort(cmp).slice(0, 5),
-      unlock: arr.filter((e) => !e.owned).sort(cmp).slice(0, 5),
+      levelUp: arr.filter((e) => e.action === 'level').sort(cmp).slice(0, 5),
+      needSecond: arr.filter((e) => e.action === 'second').sort(cmp).slice(0, 5),
+      unlock: arr.filter((e) => e.action === 'obtain').sort(cmp).slice(0, 5),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collections, reqsByCol, animalById, variantMax])
@@ -230,7 +242,7 @@ export function CollectionsView({
         </span>
       </div>
 
-      {(levelUp.length > 0 || unlock.length > 0) && (
+      {(levelUp.length > 0 || needSecond.length > 0 || unlock.length > 0) && (
         <details className="reco" open>
           <summary>Recommandations pour avancer les collections</summary>
           <div className="reco-grid">
@@ -253,7 +265,27 @@ export function CollectionsView({
               )}
             </div>
             <div className="reco-card">
+              <h3>➕ Obtenir un 2ᵉ exemplaire</h3>
+              <p className="muted reco-hint">Tu n'en as qu'un : il en faut deux pour monter de niveau.</p>
+              {needSecond.length === 0 ? (
+                <p className="muted">Rien en attente d'un second.</p>
+              ) : (
+                <ol>
+                  {needSecond.map((r) => (
+                    <li key={r.key}>
+                      <span className="reco-name">{r.label}</span>
+                      <span className="muted">
+                        {' '}
+                        niv. {r.your ?? 0} → {r.need} · {recoWhy(r)}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+            <div className="reco-card">
               <h3>🔓 Débloquer en priorité</h3>
+              <p className="muted reco-hint">Tu n'en as aucun : il en faut deux pour monter de niveau.</p>
               {unlock.length === 0 ? (
                 <p className="muted">Rien à débloquer.</p>
               ) : (
@@ -284,7 +316,7 @@ export function CollectionsView({
             </summary>
             <div className="coll-reqs">
               {reqs.map((r, i) => {
-                const { label, your, met: ok, breedable, obtainable } = reqInfo(r)
+                const { label, your, met: ok, breedable, action } = reqInfo(r)
                 const kind = r.variant_id != null ? 'variant' : 'animal'
                 const id = r.variant_id ?? r.animal_id
                 return (
@@ -293,7 +325,13 @@ export function CollectionsView({
                     <span>{label}</span>
                     <span className="muted req-need">
                       Lv {r.required_level}
-                      {!ok && !breedable ? (obtainable ? ' · non élevable' : ' · à obtenir') : ''}
+                      {!ok && !breedable
+                        ? action === 'obtain'
+                          ? ' · à obtenir (×2)'
+                          : action === 'second'
+                            ? ' · 2ᵉ exemplaire requis'
+                            : ' · non élevable'
+                        : ''}
                     </span>
                     <input
                       className="lvl"

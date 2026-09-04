@@ -167,6 +167,10 @@ button:disabled {
 .reco-card li {
   font-size: 0.88rem;
 }
+.reco-hint {
+  margin: -0.2rem 0 0.45rem;
+  font-size: 0.78rem;
+}
 .reco-name {
   font-weight: 500;
 }
