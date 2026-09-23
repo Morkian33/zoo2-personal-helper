@@ -17,10 +17,11 @@ export const EMPTY_SESSION: BreedingSession = {
 }
 
 // Older stored groups predate the boost flags.
-type StoredGroup = Omit<PairGroupDef, 'coinBoost' | 'adBoost'> & {
+type StoredGroup = Omit<PairGroupDef, 'coinBoost' | 'adBoost' | 'used'> & {
   id?: string
   coinBoost?: boolean
   adBoost?: boolean
+  used?: number
 }
 
 export function hydrateGroup(g: StoredGroup): PairGroup {
@@ -29,6 +30,7 @@ export function hydrateGroup(g: StoredGroup): PairGroup {
     id: g.id ?? crypto.randomUUID(),
     coinBoost: g.coinBoost ?? false,
     adBoost: g.adBoost ?? false,
+    used: Math.max(0, Math.min(g.count, g.used ?? 0)),
   }
 }
 

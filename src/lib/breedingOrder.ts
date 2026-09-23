@@ -27,7 +27,8 @@ export interface PairGroup {
   id: string
   levelA: number
   levelB: number
-  count: number
+  count: number       // pairs in the group
+  used: number        // pairs already validated this session (count - used remain)
   parkBonus: boolean
   coinBoost: boolean  // fodder coin: pay breed_cost extra → +pBase to attempt prob
   adBoost: boolean    // fodder ad: watch an ad → +pBase to attempt prob (stackable)

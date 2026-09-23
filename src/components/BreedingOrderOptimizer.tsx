@@ -239,38 +239,48 @@ export function BreedingOrderOptimizer({
   const parkBonusVal = pBase != null ? pairParkBonus(pBase) : null
   const currentP = session.currentPPct / 100
 
+  // Validating a pair marks it "used" rather than removing it, so a config
+  // survives the session. Every computation below works on the remaining pairs.
+  const activeGroups = useMemo(
+    () =>
+      session.groups
+        .filter((g) => g.count - g.used > 0)
+        .map((g) => ({ ...g, count: g.count - g.used })),
+    [session.groups],
+  )
+
   const scoreOf = useMemo(
-    () => makeScoreOf(strategy, session.groups),
-    [strategy, session.groups],
+    () => makeScoreOf(strategy, activeGroups),
+    [strategy, activeGroups],
   )
 
   // DP ordering values (accounts for per-group configured boosts)
   const dpValues = useMemo(
     () =>
-      pBase != null && session.groups.length > 0
-        ? analyseGroups(session.groups, currentP, pBase, scoreOf)
+      pBase != null && activeGroups.length > 0
+        ? analyseGroups(activeGroups, currentP, pBase, scoreOf)
         : [],
-    [session.groups, currentP, pBase, scoreOf],
+    [activeGroups, currentP, pBase, scoreOf],
   )
 
   // Expected session outcome under each strategy's own optimal ordering, so the
   // trade-off between total births and max-level births is visible at a glance.
   const outcomesByStrategy = useMemo(() => {
-    if (pBase == null || session.groups.length === 0) return null
+    if (pBase == null || activeGroups.length === 0) return null
     return STRATEGIES.map((s) => ({
       strategy: s,
-      ...expectedOutcomes(session.groups, currentP, pBase, makeScoreOf(s, session.groups)),
+      ...expectedOutcomes(activeGroups, currentP, pBase, makeScoreOf(s, activeGroups)),
     }))
-  }, [session.groups, currentP, pBase])
+  }, [activeGroups, currentP, pBase])
 
   const outcomes = outcomesByStrategy?.find((o) => o.strategy === strategy) ?? null
 
   const ranked = useMemo(() => {
-    if (dpValues.length === 0) return session.groups.map((g, i) => ({ g, i, v: -Infinity }))
-    return session.groups
+    if (dpValues.length === 0) return activeGroups.map((g, i) => ({ g, i, v: -Infinity }))
+    return activeGroups
       .map((g, i) => ({ g, i, v: dpValues[i] }))
       .sort((a, b) => b.v - a.v)
-  }, [session.groups, dpValues])
+  }, [activeGroups, dpValues])
 
   // Lookup: groupId → {rank, v} — used to annotate the stable insertion-order list.
   const rankMap = useMemo(
@@ -287,23 +297,23 @@ export function BreedingOrderOptimizer({
   // effects the simple `pBase × offspring` formula misses), but what we show is
   // the impact on the two reported expectations.
   const boostReco = useMemo(() => {
-    if (!pBase || session.groups.length === 0 || !outcomes) return null
+    if (!pBase || activeGroups.length === 0 || !outcomes) return null
 
     const getBoostedOutcomes = (groupId: string, boostKey: 'coinBoost' | 'adBoost') => {
-      const target = session.groups.find((g) => g.id === groupId)
+      const target = activeGroups.find((g) => g.id === groupId)
       if (!target) return null
       const boostedCoin = boostKey === 'coinBoost' ? true : target.coinBoost
       const boostedAd = boostKey === 'adBoost' ? true : target.adBoost
       let boostedGroups: PairGroup[]
       if (target.count === 1) {
-        boostedGroups = session.groups.map((g) =>
+        boostedGroups = activeGroups.map((g) =>
           g.id === groupId ? { ...g, coinBoost: boostedCoin, adBoost: boostedAd } : g,
         )
       } else {
         boostedGroups = [
-          ...session.groups.map((g) => (g.id === groupId ? { ...g, count: g.count - 1 } : g)),
-          { id: 'tmp', levelA: target.levelA, levelB: target.levelB,
-            parkBonus: target.parkBonus, coinBoost: boostedCoin, adBoost: boostedAd, count: 1 },
+          ...activeGroups.map((g) => (g.id === groupId ? { ...g, count: g.count - 1 } : g)),
+          { id: 'tmp', levelA: target.levelA, levelB: target.levelB, parkBonus: target.parkBonus,
+            coinBoost: boostedCoin, adBoost: boostedAd, count: 1, used: 0 },
         ]
       }
       // Boosts never change offspring levels, so the boosted run is directly
@@ -329,16 +339,18 @@ export function BreedingOrderOptimizer({
       }
     }
 
-    for (const g of session.groups) {
+    for (const g of activeGroups) {
       if (!g.coinBoost) coin = consider(g, 'coinBoost', coin)
       if (!g.adBoost) ad = consider(g, 'adBoost', ad)
     }
 
     if (!coin && !ad) return null
     return { coin, ad }
-  }, [session.groups, currentP, pBase, outcomes, scoreOf])
+  }, [activeGroups, currentP, pBase, outcomes, scoreOf])
 
   const totalPairs = session.groups.reduce((s, g) => s + g.count, 0)
+  const remainingPairs = activeGroups.reduce((s, g) => s + g.count, 0)
+  const usedPairs = totalPairs - remainingPairs
 
   // ── Pair mutations ────────────────────────────────────────────────────────
 
@@ -348,7 +360,7 @@ export function BreedingOrderOptimizer({
       ...s,
       groups: [
         ...s.groups,
-        { id, levelA: 5, levelB: 5, count: 1, parkBonus: false, coinBoost: false, adBoost: false },
+        { id, levelA: 5, levelB: 5, count: 1, used: 0, parkBonus: false, coinBoost: false, adBoost: false },
       ],
     }))
   }
@@ -371,10 +383,16 @@ export function BreedingOrderOptimizer({
     setSession((s) => ({
       ...s,
       currentPPct: Math.round(newP * 1000) / 10,
-      groups: s.groups
-        .map((g) => (g.id === id ? { ...g, count: g.count - 1 } : g))
-        .filter((g) => g.count > 0),
+      groups: s.groups.map((g) =>
+        g.id === id ? { ...g, used: Math.min(g.count, g.used + 1) } : g,
+      ),
     }))
+  }
+
+  // New session with the same pairs: every pair becomes available again. The
+  // probability is kept (pity carries over in the game).
+  function resetUsed() {
+    setSession((s) => ({ ...s, groups: s.groups.map((g) => ({ ...g, used: 0 })) }))
   }
 
   // ── Configs ───────────────────────────────────────────────────────────────
@@ -406,7 +424,7 @@ export function BreedingOrderOptimizer({
       name: saveName.trim(),
       animalId: session.animalId,
       pPct: session.currentPPct,
-      groups: session.groups.map(({ id: _id, ...def }) => def),
+      groups: session.groups.map(({ id: _id, ...def }) => ({ ...def, used: 0 })),
     }
     setConfigs([...configs, cfg])
     persistConfig(cfg)
@@ -426,6 +444,8 @@ export function BreedingOrderOptimizer({
 
       const boostedCoin = boostKey === 'coinBoost' ? true : target.coinBoost
       const boostedAd = boostKey === 'adBoost' ? true : target.adBoost
+      const remaining = target.count - target.used
+      if (remaining <= 0) return s
 
       // Try to merge with an existing group that already has this exact config.
       const match = s.groups.find(
@@ -456,7 +476,8 @@ export function BreedingOrderOptimizer({
         }
       }
 
-      // count > 1: decrement source, then merge or create boosted group.
+      // count > 1: move one remaining pair out of the source (used pairs stay),
+      // then merge or create the boosted group.
       let groups = s.groups.map((g) =>
         g.id === groupId ? { ...g, count: g.count - 1 } : g,
       )
@@ -474,6 +495,7 @@ export function BreedingOrderOptimizer({
             coinBoost: boostedCoin,
             adBoost: boostedAd,
             count: 1,
+            used: 0,
           },
         ]
       }
@@ -498,7 +520,7 @@ export function BreedingOrderOptimizer({
       ...cfg,
       animalId: session.animalId,
       pPct: session.currentPPct,
-      groups: session.groups.map(({ id: _id, ...def }) => def),
+      groups: session.groups.map(({ id: _id, ...def }) => ({ ...def, used: 0 })),
     }
     setConfigs(configs.map((c) => (c.id === id ? next : c)))
     persistConfig(next)
@@ -750,7 +772,7 @@ export function BreedingOrderOptimizer({
           )}
 
           {/* ── Recommendation (main action zone) ─────────────────────────── */}
-          {totalPairs > 0 && recommended ? (
+          {remainingPairs > 0 && recommended ? (
             <div className="breed-order-reco">
               <div className="breed-order-reco-label">Valide maintenant :</div>
               <div className="breed-order-reco-pair">
@@ -797,17 +819,33 @@ export function BreedingOrderOptimizer({
                 </div>
               )}
             </div>
-          ) : totalPairs === 0 && session.groups.length > 0 ? (
-            <p className="muted">Toutes les paires ont réussi — session terminée.</p>
+          ) : totalPairs > 0 && remainingPairs === 0 ? (
+            <p className="muted">
+              Toutes les paires ont été utilisées — session terminée.{' '}
+              <button className="small" onClick={resetUsed}>
+                Nouvelle session (réutiliser les couples)
+              </button>
+            </p>
           ) : null}
 
           {/* Pairs list */}
           <div className="breed-order-pairs">
             <div className="breed-order-pairs-head">
               <span>
-                {totalPairs} paire{totalPairs !== 1 ? 's' : ''} · {session.groups.length}{' '}
-                groupe{session.groups.length !== 1 ? 's' : ''}
+                {usedPairs > 0 ? `${remainingPairs} / ${totalPairs}` : totalPairs} paire
+                {totalPairs !== 1 ? 's' : ''}
+                {usedPairs > 0 ? ' restante' + (remainingPairs !== 1 ? 's' : '') : ''} ·{' '}
+                {session.groups.length} groupe{session.groups.length !== 1 ? 's' : ''}
               </span>
+              {usedPairs > 0 && (
+                <button
+                  className="small"
+                  onClick={resetUsed}
+                  title="Rendre tous les couples disponibles (la probabilité est conservée)"
+                >
+                  ↺ Réinitialiser les couples
+                </button>
+              )}
               <button className="small" onClick={addGroup}>
                 + Groupe
               </button>
@@ -822,6 +860,8 @@ export function BreedingOrderOptimizer({
             {session.groups.map((group) => {
               const { rank = -1, v = -Infinity } = rankMap.get(group.id) ?? {}
               const offspring = offspringLevel(group.levelA, group.levelB)
+              const remaining = group.count - group.used
+              const done = remaining === 0
               const isFirst = rank === 0
               const delta = v - bestValue
               const configuredExtra =
@@ -830,8 +870,13 @@ export function BreedingOrderOptimizer({
                 Math.min(1, currentP + (group.parkBonus ? parkBonusVal! : 0) + configuredExtra) *
                 100
               return (
-                <div key={group.id} className={`breed-order-pair${isFirst ? ' first' : ''}`}>
-                  <span className="breed-order-rank">{isFirst ? '→' : rank >= 0 ? `${rank + 1}.` : '–'}</span>
+                <div
+                  key={group.id}
+                  className={`breed-order-pair${isFirst ? ' first' : ''}${done ? ' done' : ''}`}
+                >
+                  <span className="breed-order-rank">
+                    {done ? '✓' : isFirst ? '→' : rank >= 0 ? `${rank + 1}.` : '–'}
+                  </span>
                   <label>
                     A
                     <NumberField
@@ -884,11 +929,22 @@ export function BreedingOrderOptimizer({
                     <div className="breed-order-count">
                       <button
                         className="small"
-                        onClick={() => updateGroup(group.id, 'count', Math.max(1, group.count - 1))}
+                        onClick={() =>
+                          setSession((s) => ({
+                            ...s,
+                            groups: s.groups.map((g) => {
+                              if (g.id !== group.id) return g
+                              const count = Math.max(1, g.count - 1)
+                              return { ...g, count, used: Math.min(g.used, count) }
+                            }),
+                          }))
+                        }
                       >
                         −
                       </button>
-                      <span>{group.count}</span>
+                      <span title={group.used > 0 ? `${group.used} utilisée${group.used > 1 ? 's' : ''}` : undefined}>
+                        {group.used > 0 ? `${remaining}/${group.count}` : group.count}
+                      </span>
                       <button
                         className="small"
                         onClick={() => updateGroup(group.id, 'count', group.count + 1)}

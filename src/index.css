@@ -914,6 +914,12 @@ a {
   border-color: var(--accent);
   background: #141c2b;
 }
+.breed-order-pair.done {
+  opacity: 0.55;
+}
+.breed-order-pair.done .breed-order-rank {
+  color: var(--muted);
+}
 .breed-order-rank {
   width: 1.8rem;
   font-weight: 600;
