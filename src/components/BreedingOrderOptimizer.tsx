@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AnimalEntry } from '../lib/types'
 import {
   offspringLevel,
@@ -10,54 +10,71 @@ import {
   type PairGroup,
   type BreedingConfig,
 } from '../lib/breedingOrder'
+import {
+  EMPTY_SESSION,
+  hydrateGroup,
+  loadBreedingState,
+  saveBreedingSession,
+  upsertBreedingConfig,
+  deleteBreedingConfig,
+  readLegacyLocalState,
+  clearLegacyLocalState,
+  type BreedingSession,
+} from '../lib/breedingStore'
 import { norm } from '../lib/format'
 
-// ── Storage ──────────────────────────────────────────────────────────────────
+type SessionState = BreedingSession
 
-interface SessionState {
-  animalId: number | null
-  currentPPct: number
-  groups: PairGroup[]
-}
-
-const SESSION_KEY = 'zoo2.breeding.order'
-const CONFIGS_KEY = 'zoo2.breeding.configs'
-
-type StoredGroup = Omit<PairGroup, 'coinBoost' | 'adBoost'> & {
-  coinBoost?: boolean
-  adBoost?: boolean
-}
-
-function hydrateGroup(g: StoredGroup): PairGroup {
-  return { ...g, coinBoost: g.coinBoost ?? false, adBoost: g.adBoost ?? false }
-}
-
-function loadSession(): SessionState {
-  try {
-    const s = localStorage.getItem(SESSION_KEY)
-    if (s) {
-      const raw = JSON.parse(s) as Omit<SessionState, 'groups'> & { groups: StoredGroup[] }
-      return { ...raw, groups: raw.groups.map(hydrateGroup) }
-    }
-  } catch { /* ignore */ }
-  return { animalId: null, currentPPct: 4, groups: [] }
-}
-
-function loadConfigs(): BreedingConfig[] {
-  try {
-    const s = localStorage.getItem(CONFIGS_KEY)
-    if (s) return JSON.parse(s) as BreedingConfig[]
-  } catch { /* ignore */ }
-  return []
-}
-
-function saveConfigs(configs: BreedingConfig[]): void {
-  localStorage.setItem(CONFIGS_KEY, JSON.stringify(configs))
-}
+// Debounce for the session upsert: every keystroke updates the local state,
+// the server only sees the settled value.
+const SESSION_SAVE_DELAY_MS = 500
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Numeric input that lets the user clear the field while typing: the local text
+// is free, the committed value is only pushed when it parses inside [min, max].
+// On blur an invalid text snaps back to the committed value.
+function NumberField({
+  value,
+  min,
+  max,
+  step,
+  onCommit,
+}: {
+  value: number
+  min: number
+  max: number
+  step?: number
+  onCommit: (v: number) => void
+}) {
+  const [text, setText] = useState(String(value))
+  const [focused, setFocused] = useState(false)
+  useEffect(() => {
+    if (!focused) setText(String(value))
+  }, [value, focused])
+  return (
+    <input
+      type="number"
+      min={min}
+      max={max}
+      step={step}
+      value={text}
+      onFocus={() => setFocused(true)}
+      onChange={(e) => {
+        const t = e.target.value
+        setText(t)
+        const n = Number(t)
+        if (t.trim() !== '' && Number.isFinite(n) && n >= min && n <= max) onCommit(n)
+      }}
+      onBlur={() => {
+        setFocused(false)
+        setText(String(value))
+      }}
+    />
+  )
+}
 
 function GroupId({ g }: { g: PairGroup }) {
   return (
@@ -127,26 +144,83 @@ function makeScoreOf(strategy: Strategy, groups: PairGroup[]): (l: number) => nu
   return (l) => (l === maxLevel ? 1 : 0) + 0.001 * l
 }
 
-export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) {
-  const [session, setSessionRaw] = useState<SessionState>(loadSession)
-  const [configs, setConfigsRaw] = useState<BreedingConfig[]>(loadConfigs)
+export function BreedingOrderOptimizer({
+  entries,
+  userId,
+}: {
+  entries: AnimalEntry[]
+  userId: string | null
+}) {
+  const [session, setSessionRaw] = useState<SessionState>(EMPTY_SESSION)
+  const [configs, setConfigs] = useState<BreedingConfig[]>([])
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [saveName, setSaveName] = useState('')
   const [showSaveForm, setShowSaveForm] = useState(false)
   const [strategy, setStrategy] = useState<Strategy>('balance')
 
+  // ── Persistence (server-side, per user) ───────────────────────────────────
+
+  const saveTimer = useRef<number | null>(null)
+  const pendingSession = useRef<SessionState | null>(null)
+
+  function flushSession() {
+    if (saveTimer.current != null) {
+      window.clearTimeout(saveTimer.current)
+      saveTimer.current = null
+    }
+    const s = pendingSession.current
+    pendingSession.current = null
+    if (!userId || !s) return
+    saveBreedingSession(userId, s).catch((e) => setError(String(e?.message ?? e)))
+  }
+
   function setSession(fn: (s: SessionState) => SessionState) {
     setSessionRaw((prev) => {
       const next = fn(prev)
-      localStorage.setItem(SESSION_KEY, JSON.stringify(next))
+      pendingSession.current = next
+      if (saveTimer.current != null) window.clearTimeout(saveTimer.current)
+      saveTimer.current = window.setTimeout(flushSession, SESSION_SAVE_DELAY_MS)
       return next
     })
   }
 
-  function setConfigs(next: BreedingConfig[]) {
-    setConfigsRaw(next)
-    saveConfigs(next)
-  }
+  // Load on mount / user change. A user with nothing on the server yet gets
+  // their previous localStorage state migrated once.
+  useEffect(() => {
+    if (!userId) return
+    let cancelled = false
+    setLoaded(false)
+    setError(null)
+    ;(async () => {
+      try {
+        let { session: srv, configs: srvConfigs } = await loadBreedingState()
+        if (!srv && srvConfigs.length === 0) {
+          const legacy = readLegacyLocalState()
+          if (legacy.session || legacy.configs.length > 0) {
+            for (const c of legacy.configs) await upsertBreedingConfig(userId, c)
+            if (legacy.session) await saveBreedingSession(userId, legacy.session)
+            clearLegacyLocalState()
+            srv = legacy.session
+            srvConfigs = legacy.configs
+          }
+        }
+        if (cancelled) return
+        setSessionRaw(srv ?? EMPTY_SESSION)
+        setConfigs(srvConfigs)
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        if (!cancelled) setLoaded(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+      flushSession()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
 
   // ── Derived ──────────────────────────────────────────────────────────────
 
@@ -310,8 +384,19 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
       hydrateGroup({ ...def, id: crypto.randomUUID() }),
     )
     const a = breedable.find((e) => e.id === cfg.animalId)
-    const pct = a ? Math.round(a.breed_proba! * 1000) / 10 : 4
-    setSession((s) => ({ ...s, animalId: cfg.animalId, groups, currentPPct: pct }))
+    const basePct = a ? Math.round(a.breed_proba! * 1000) / 10 : 4
+    setSession((s) => ({
+      ...s,
+      animalId: cfg.animalId,
+      groups,
+      currentPPct: cfg.pPct ?? basePct,
+      configId: cfg.id,
+    }))
+  }
+
+  function persistConfig(cfg: BreedingConfig) {
+    if (!userId) return
+    upsertBreedingConfig(userId, cfg).catch((e) => setError(String(e?.message ?? e)))
   }
 
   function saveConfig() {
@@ -320,9 +405,12 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
       id: crypto.randomUUID(),
       name: saveName.trim(),
       animalId: session.animalId,
+      pPct: session.currentPPct,
       groups: session.groups.map(({ id: _id, ...def }) => def),
     }
     setConfigs([...configs, cfg])
+    persistConfig(cfg)
+    setSession((s) => ({ ...s, configId: cfg.id }))
     setSaveName('')
     setShowSaveForm(false)
   }
@@ -396,22 +484,28 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
 
   function deleteConfig(id: string) {
     setConfigs(configs.filter((c) => c.id !== id))
+    deleteBreedingConfig(id).catch((e) => setError(String(e?.message ?? e)))
+    if (session.configId === id) setSession((s) => ({ ...s, configId: null }))
   }
 
+  // Overwrite a saved config with the current session: pairs AND the
+  // probability reached, so the next session resumes from there.
   function overwriteConfig(id: string) {
     if (!session.animalId) return
-    setConfigs(
-      configs.map((c) =>
-        c.id === id
-          ? {
-              ...c,
-              animalId: session.animalId!,
-              groups: session.groups.map(({ id: _id, ...def }) => def),
-            }
-          : c,
-      ),
-    )
+    const cfg = configs.find((c) => c.id === id)
+    if (!cfg) return
+    const next: BreedingConfig = {
+      ...cfg,
+      animalId: session.animalId,
+      pPct: session.currentPPct,
+      groups: session.groups.map(({ id: _id, ...def }) => def),
+    }
+    setConfigs(configs.map((c) => (c.id === id ? next : c)))
+    persistConfig(next)
+    setSession((s) => ({ ...s, configId: id }))
   }
+
+  const activeConfig = configs.find((c) => c.id === session.configId) ?? null
 
   // ── Species search ────────────────────────────────────────────────────────
 
@@ -421,8 +515,17 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  if (!loaded) {
+    return (
+      <div className="breed-order">
+        <p className="muted">Chargement…</p>
+      </div>
+    )
+  }
+
   return (
     <div className="breed-order">
+      {error && <p className="status error">{error}</p>}
       {/* Species picker */}
       {!animal ? (
         <div className="admin-search">
@@ -478,13 +581,16 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
           {configs.map((cfg) => {
             const a = breedable.find((e) => e.id === cfg.animalId)
             return (
-              <div key={cfg.id} className="breed-order-config-chip">
+              <div
+                key={cfg.id}
+                className={`breed-order-config-chip${cfg.id === session.configId ? ' active' : ''}`}
+              >
                 <button
                   className="small"
                   onClick={() => loadConfig(cfg)}
                   title={
                     a
-                      ? `${a.name_fr ?? a.name_en} · ${cfg.groups.map((g) => `${g.count}×Niv.${g.levelA}+${g.levelB}`).join(', ')}`
+                      ? `${a.name_fr ?? a.name_en} · ${cfg.groups.map((g) => `${g.count}×Niv.${g.levelA}+${g.levelB}`).join(', ')}${cfg.pPct != null ? ` · ${cfg.pPct}%` : ''}`
                       : cfg.name
                   }
                 >
@@ -545,21 +651,24 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
             <div className="breed-order-proba-row">
               <label className="wtp">
                 Probabilité actuelle :
-                <input
-                  type="number"
+                <NumberField
                   min={0}
                   max={100}
                   step={0.1}
                   value={session.currentPPct}
-                  onChange={(e) =>
-                    setSession((s) => ({
-                      ...s,
-                      currentPPct: Math.max(0, Math.min(100, Number(e.target.value) || 0)),
-                    }))
-                  }
+                  onCommit={(v) => setSession((s) => ({ ...s, currentPPct: v }))}
                 />
                 %
               </label>
+              {activeConfig && (
+                <button
+                  className="small"
+                  title={`Enregistrer les paires et la probabilité actuelle dans « ${activeConfig.name} »`}
+                  onClick={() => overwriteConfig(activeConfig.id)}
+                >
+                  Enregistrer dans « {activeConfig.name} »
+                </button>
+              )}
               <button
                 className="small"
                 title="Réinitialiser à la proba de base (après un succès)"
@@ -725,34 +834,20 @@ export function BreedingOrderOptimizer({ entries }: { entries: AnimalEntry[] }) 
                   <span className="breed-order-rank">{isFirst ? '→' : rank >= 0 ? `${rank + 1}.` : '–'}</span>
                   <label>
                     A
-                    <input
-                      type="number"
+                    <NumberField
                       min={1}
                       max={40}
                       value={group.levelA}
-                      onChange={(e) =>
-                        updateGroup(
-                          group.id,
-                          'levelA',
-                          Math.max(1, Math.min(40, Number(e.target.value) || 1)),
-                        )
-                      }
+                      onCommit={(v) => updateGroup(group.id, 'levelA', v)}
                     />
                   </label>
                   <label>
                     B
-                    <input
-                      type="number"
+                    <NumberField
                       min={1}
                       max={40}
                       value={group.levelB}
-                      onChange={(e) =>
-                        updateGroup(
-                          group.id,
-                          'levelB',
-                          Math.max(1, Math.min(40, Number(e.target.value) || 1)),
-                        )
-                      }
+                      onCommit={(v) => updateGroup(group.id, 'levelB', v)}
                     />
                   </label>
                   <span className="breed-order-offspring">→ niv.&nbsp;{offspring}</span>

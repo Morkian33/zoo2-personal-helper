@@ -806,6 +806,10 @@ a {
   align-items: center;
   gap: 0.15rem;
 }
+.breed-order-config-chip.active > button:first-child {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 .breed-order-save-form {
   display: flex;
   align-items: center;

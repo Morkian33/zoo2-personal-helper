@@ -39,6 +39,10 @@ The UI is in French; the codebase (and these docs) are in English.
   - `public.user_animals`: `owned_count` (0 / 1 / 2+), `max_level`, `favorite`.
   - `public.user_variants`: `owned`, `max_level` per coat.
   - `public.user_shelters`: shelter level per biome.
+  - `public.user_breeding_session` / `public.user_breeding_configs`: the "Ordre
+    d'élevage" in-progress session (one row) and saved configs (species, pairs, and the
+    probability reached when saved). Previously in localStorage; a user with nothing on
+    the server gets their localStorage state migrated once on first load.
 - **Metrics recomputed in-app** from the raw data — no derived value is stored:
   - `src/lib/enclosure.ts`: enclosure optimization (tile = 16, enclosure ≥ 9 tiles,
     `size effective = T*16/N`).
@@ -59,9 +63,12 @@ In Supabase → **SQL Editor**, run in order:
 3. `supabase/seed.sql` — catalog animals.
 4. `supabase/seed_variants.sql` — variant coats (+ FR labels).
 
-On an existing DB, also run `supabase/migration_delete_account.sql` once (the
-`delete_own_account()` function behind the "Supprimer mon compte" button; already part of
-`schema.sql` for a fresh install).
+On an existing DB, also run once (both already part of `schema.sql` for a fresh install):
+
+- `supabase/migration_delete_account.sql` — the `delete_own_account()` function behind
+  the "Supprimer mon compte" button.
+- `supabase/migration_breeding_state.sql` — `user_breeding_session` /
+  `user_breeding_configs`, the server-side state of the "Ordre d'élevage" tab.
 
 Then populate collections from the **Admin → Synchronisation** tab (wiki sync); there is
 no collections seed. Variants and new animals are also kept up to date via the same admin

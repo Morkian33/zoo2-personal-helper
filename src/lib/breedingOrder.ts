@@ -39,6 +39,7 @@ export interface BreedingConfig {
   id: string
   name: string
   animalId: number
+  pPct: number | null   // probability (%) reached when saved; null = species base
   groups: PairGroupDef[]
 }
 

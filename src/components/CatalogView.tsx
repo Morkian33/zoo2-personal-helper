@@ -314,7 +314,7 @@ export function CatalogView({ userId }: { userId: string | null }) {
               setMaxAds={setBreedMaxAds}
             />
           )}
-          {breedingTab === 'order' && <BreedingOrderOptimizer entries={entries} />}
+          {breedingTab === 'order' && <BreedingOrderOptimizer entries={entries} userId={userId} />}
         </div>
       )}
 
