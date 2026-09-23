@@ -1,0 +1,6 @@
+# Minimal hosted config: `supabase config push` only touches the keys declared here.
+# Preview with `supabase config diff` before pushing.
+project_id = "yzsqoyxfxqefxqxgdxnz"
+
+[auth]
+minimum_password_length = 8

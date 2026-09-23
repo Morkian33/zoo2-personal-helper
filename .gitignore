@@ -11,3 +11,4 @@ dist-ssr
 supabase/seed_user_data.sql
 supabase/migration_admin.sql
 supabase/seed_user_variants.sql
+supabase/.temp
