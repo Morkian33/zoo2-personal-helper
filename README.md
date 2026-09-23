@@ -59,6 +59,10 @@ In Supabase → **SQL Editor**, run in order:
 3. `supabase/seed.sql` — catalog animals.
 4. `supabase/seed_variants.sql` — variant coats (+ FR labels).
 
+On an existing DB, also run `supabase/migration_delete_account.sql` once (the
+`delete_own_account()` function behind the "Supprimer mon compte" button; already part of
+`schema.sql` for a fresh install).
+
 Then populate collections from the **Admin → Synchronisation** tab (wiki sync); there is
 no collections seed. Variants and new animals are also kept up to date via the same admin
 sync.
@@ -71,6 +75,12 @@ sync.
 > `seed_user_data.sql` / `seed_user_variants.sql` are personal inventory imports and are
 > **not committed** (gitignored).
 
+### Maintenance
+
+Every visitor gets an anonymous auth user; abandoned ones pile up in `auth.users`. Run
+`supabase/maintenance_purge_anonymous.sql` in the SQL Editor from time to time (default:
+anonymous users idle for 30 days). Their personal rows cascade away.
+
 ## Authentication model
 
 - On arrival, an **anonymous session** is created automatically → the app is usable
@@ -80,6 +90,10 @@ sync.
 - The username is the login anchor. Since Supabase requires an email for a password
   account, a stable internal email is derived (`username@users.zoo2.local`). The optional
   real email is kept in metadata (`recovery_email`) for **future password recovery**.
+- **No password recovery yet**: a forgotten password means a lost account. The form says so.
+- **Account deletion** is self-service (account bar → "Supprimer mon compte", or "Effacer
+  mes données de ce navigateur" for an anonymous session): the `delete_own_account()`
+  RPC deletes the caller's `auth.users` row, personal rows cascade.
 
 ## Supabase prerequisites
 
@@ -88,7 +102,9 @@ In the Supabase project dashboard:
 1. **Authentication → Sign In / Providers → Anonymous sign-ins**: enable.
 2. **Authentication → Sign In / Providers → Email**: **disable "Confirm email"** (the
    upgrade uses a non-deliverable internal email that must apply without confirmation).
-3. **Project Settings → API**: grab the `Project URL` and the publishable/anon key.
+3. **Authentication → Sign In / Providers → Email → Minimum password length**: set to 8
+   (the form enforces 8 client-side; without this the API accepts Supabase's default of 6).
+4. **Project Settings → API**: grab the `Project URL` and the publishable/anon key.
 
 ## Run locally
 

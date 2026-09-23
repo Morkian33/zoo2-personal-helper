@@ -45,6 +45,10 @@ export function SecureAccountForm() {
           autoComplete="new-password"
         />
       </label>
+      <p className="status warning">
+        Pas de récupération de mot de passe pour l'instant : si tu l'oublies, le compte et
+        ses données sont perdus. Note-le quelque part.
+      </p>
       <label>
         Email <span className="muted">(optionnel — récupération future)</span>
         <input

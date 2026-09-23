@@ -204,3 +204,15 @@ create policy biome_labels_read on public.biome_labels for select to authenticat
 drop policy if exists biome_labels_admin_write on public.biome_labels;
 create policy biome_labels_admin_write on public.biome_labels for all to authenticated
   using (public.is_admin()) with check (public.is_admin());
+
+-- ---------- Self-service account deletion ----------
+-- Deletes the caller's auth user; personal rows follow via `on delete cascade`.
+create or replace function public.delete_own_account()
+  returns void
+  language sql security definer
+  set search_path = public
+as $$
+  delete from auth.users where id = auth.uid();
+$$;
+revoke all on function public.delete_own_account() from public;
+grant execute on function public.delete_own_account() to authenticated;

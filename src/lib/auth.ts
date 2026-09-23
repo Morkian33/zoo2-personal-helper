@@ -56,3 +56,12 @@ export async function login(username: string, password: string): Promise<void> {
 export async function logout(): Promise<void> {
   await supabase.auth.signOut()
 }
+
+// Deletes the current user (anonymous or permanent) and all their personal data,
+// then drops the local session. The server-side user is already gone, so only the
+// local session is cleared (a global sign-out would fail on a missing user).
+export async function deleteAccount(): Promise<void> {
+  const { error } = await supabase.rpc('delete_own_account')
+  if (error) throw error
+  await supabase.auth.signOut({ scope: 'local' })
+}
