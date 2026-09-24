@@ -30,7 +30,7 @@ Ce fichier documente les règles du jeu telles qu'elles sont comprises et implé
 - **Fourrage pièces** : payer `breed_cost` pièces supplémentaires ajoute `+breed_proba` à la tentative.
 - **Fourrage pub** : regarder une pub ajoute `+breed_proba` à la tentative (cumulable avec le fourrage pièces).
 - **Bonus d'élevage de guilde** (temporaire, 48h) : `+2`, `+4` ou `+6` points de % sur chaque tentative.
-  Modélisé comme le bonus de parc : additif plat, ne change pas l'incrément de pitié (hypothèse, non vérifiée in-game).
+  Additif plat, indépendant du bonus de parc, ne change pas l'incrément de pitié (vérifié in-game).
 
 ### Résultat en cas de succès — niveau du nouveau-né
 
