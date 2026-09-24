@@ -12,7 +12,7 @@ import {
   type BreedParams,
 } from '../lib/breedingPlan'
 import { int, norm } from '../lib/format'
-import { fodderCostFactor, type EventConfig } from '../lib/events'
+import { fodderCostFactor, type EventConfig, guildBonusP } from '../lib/events'
 import type { AnimalEntry } from '../lib/types'
 
 function fmtHours(h: number): string {
@@ -70,6 +70,7 @@ export function BreedingPlanner({
         fodderCost: animal.breed_cost! * fodderCostFactor(events),
         cycleHours: (parseHours(animal.breed_duration) ?? 0) + COOLDOWN_HOURS,
         park,
+        extraBonus: guildBonusP(events),
       }
     : null
 

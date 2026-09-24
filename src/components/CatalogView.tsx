@@ -6,7 +6,8 @@ import { shelterBiome } from '../lib/biome'
 import type { AnimalEntry, ShelterLevels, VariantEntry, BiomeLabels } from '../lib/types'
 import type { CollectionRow, CollectionRequirementRow } from '../lib/collections'
 import { ALL } from '../lib/breedingPlan'
-import { loadEvents, saveEvents, eventsActive, type EventConfig } from '../lib/events'
+import { loadEvents, saveEvents, eventsActive, guildBonusP, type EventConfig } from '../lib/events'
+import { GuildBonusControl } from './GuildBonusControl'
 import { EventsBar } from './EventsBar'
 import { CollectionsView } from './CollectionsView'
 import { BreedingPlanner } from './BreedingPlanner'
@@ -290,6 +291,15 @@ export function CatalogView({ userId }: { userId: string | null }) {
 
       {tab === 'breeding' && (
         <div className="breeding-tabs">
+          <div className={`events-bar guild-bar${events.guildBonus > 0 ? ' active' : ''}`}>
+            <span className="events-title">
+              Guilde{events.guildBonus > 0 ? ` ⚡ +${events.guildBonus} %` : ''}
+            </span>
+            <GuildBonusControl events={events} setEvents={setEvents} />
+            <span className="muted">
+              Ajouté à chaque tentative, comme le bonus de parc. Pris en compte ici et dans Analyse.
+            </span>
+          </div>
           <nav className="subtabs">
             <button
               className={`subtab ${breedingTab === 'planner' ? 'active' : ''}`}
@@ -314,7 +324,13 @@ export function CatalogView({ userId }: { userId: string | null }) {
               setMaxAds={setBreedMaxAds}
             />
           )}
-          {breedingTab === 'order' && <BreedingOrderOptimizer entries={entries} userId={userId} />}
+          {breedingTab === 'order' && (
+            <BreedingOrderOptimizer
+              entries={entries}
+              userId={userId}
+              extraP={guildBonusP(events)}
+            />
+          )}
         </div>
       )}
 

@@ -147,9 +147,11 @@ function makeScoreOf(strategy: Strategy, groups: PairGroup[]): (l: number) => nu
 export function BreedingOrderOptimizer({
   entries,
   userId,
+  extraP = 0,
 }: {
   entries: AnimalEntry[]
   userId: string | null
+  extraP?: number // flat additive on every attempt (guild bonus), fraction
 }) {
   const [session, setSessionRaw] = useState<SessionState>(EMPTY_SESSION)
   const [configs, setConfigs] = useState<BreedingConfig[]>([])
@@ -258,9 +260,9 @@ export function BreedingOrderOptimizer({
   const dpValues = useMemo(
     () =>
       pBase != null && activeGroups.length > 0
-        ? analyseGroups(activeGroups, currentP, pBase, scoreOf)
+        ? analyseGroups(activeGroups, currentP, pBase, scoreOf, extraP)
         : [],
-    [activeGroups, currentP, pBase, scoreOf],
+    [activeGroups, currentP, pBase, scoreOf, extraP],
   )
 
   // Expected session outcome under each strategy's own optimal ordering, so the
@@ -269,9 +271,9 @@ export function BreedingOrderOptimizer({
     if (pBase == null || activeGroups.length === 0) return null
     return STRATEGIES.map((s) => ({
       strategy: s,
-      ...expectedOutcomes(activeGroups, currentP, pBase, makeScoreOf(s, activeGroups)),
+      ...expectedOutcomes(activeGroups, currentP, pBase, makeScoreOf(s, activeGroups), extraP),
     }))
-  }, [activeGroups, currentP, pBase])
+  }, [activeGroups, currentP, pBase, extraP])
 
   const outcomes = outcomesByStrategy?.find((o) => o.strategy === strategy) ?? null
 
@@ -318,7 +320,7 @@ export function BreedingOrderOptimizer({
       }
       // Boosts never change offspring levels, so the boosted run is directly
       // comparable to `outcomes` (same scoreOf, same maxLevel).
-      return expectedOutcomes(boostedGroups, currentP, pBase, scoreOf)
+      return expectedOutcomes(boostedGroups, currentP, pBase, scoreOf, extraP)
     }
 
     type Candidate = { group: PairGroup; delta: number; dBirths: number; dMaxLevel: number }
@@ -346,7 +348,7 @@ export function BreedingOrderOptimizer({
 
     if (!coin && !ad) return null
     return { coin, ad }
-  }, [activeGroups, currentP, pBase, outcomes, scoreOf])
+  }, [activeGroups, currentP, pBase, outcomes, scoreOf, extraP])
 
   const totalPairs = session.groups.reduce((s, g) => s + g.count, 0)
   const remainingPairs = activeGroups.reduce((s, g) => s + g.count, 0)
@@ -589,6 +591,7 @@ export function BreedingOrderOptimizer({
             base {(pBase! * 100).toFixed(0)}% · incrément +{(inc! * 100).toFixed(0)}%/échec ·
             bonus parc +{(parkBonusVal! * 100).toFixed(0)}% · seuil 2 paires{' '}
             {(crossover! * 100).toFixed(0)}%
+            {extraP > 0 && ` · guilde +${(extraP * 100).toFixed(0)}%`}
           </span>
           <button className="small" onClick={() => setSession((s) => ({ ...s, animalId: null }))}>
             Changer
@@ -867,8 +870,10 @@ export function BreedingOrderOptimizer({
               const configuredExtra =
                 (group.coinBoost ? pBase : 0) + (group.adBoost ? pBase : 0)
               const effectivePPct =
-                Math.min(1, currentP + (group.parkBonus ? parkBonusVal! : 0) + configuredExtra) *
-                100
+                Math.min(
+                  1,
+                  currentP + extraP + (group.parkBonus ? parkBonusVal! : 0) + configuredExtra,
+                ) * 100
               return (
                 <div
                   key={group.id}
@@ -920,7 +925,7 @@ export function BreedingOrderOptimizer({
                     />
                     Pub
                   </label>
-                  {(group.parkBonus || group.coinBoost || group.adBoost) && (
+                  {(extraP > 0 || group.parkBonus || group.coinBoost || group.adBoost) && (
                     <span className="muted" style={{ fontSize: '0.75rem' }}>
                       ({effectivePPct.toFixed(0)}%)
                     </span>

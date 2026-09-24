@@ -29,6 +29,8 @@ Ce fichier documente les règles du jeu telles qu'elles sont comprises et implé
   Biomes concernés : Forest, Ice, Plains, Savanna, Jungle, Water.
 - **Fourrage pièces** : payer `breed_cost` pièces supplémentaires ajoute `+breed_proba` à la tentative.
 - **Fourrage pub** : regarder une pub ajoute `+breed_proba` à la tentative (cumulable avec le fourrage pièces).
+- **Bonus d'élevage de guilde** (temporaire, 48h) : `+2`, `+4` ou `+6` points de % sur chaque tentative.
+  Modélisé comme le bonus de parc : additif plat, ne change pas l'incrément de pitié (hypothèse, non vérifiée in-game).
 
 ### Résultat en cas de succès — niveau du nouveau-né
 
@@ -72,6 +74,7 @@ Exemple bats (4 %) : seuil = 20 %
 | `births` = 2 (jumeaux) | Chaque succès donne 2 nouveau-nés au lieu de 1 |
 | `births` = 3 (triplés) | Chaque succès donne 3 nouveau-nés |
 | `xp2` | Toutes les actions XP rapportent ×2 |
+| `guildBonus` = 2 / 4 / 6 | Bonus d'élevage de guilde : +N points de % sur chaque tentative (Analyse, Stratégie fourrage, Ordre de validation) |
 
 ---
 

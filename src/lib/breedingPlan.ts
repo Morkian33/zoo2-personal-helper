@@ -15,6 +15,7 @@ export interface BreedParams {
   fodderCost?: number // coins per coin-fodder (defaults to cost; lower during a fodder event)
   cycleHours: number // breeding duration + 8h cooldown, hours per attempt
   park: boolean // bred in its bonus park (+trunc(base/2))
+  extraBonus?: number // flat additive on every attempt (guild breeding bonus), fraction
 }
 
 export interface FodderPolicy {
@@ -43,7 +44,7 @@ export function parkBonus(base: number): number {
 
 export function simulate(p: BreedParams, policy: FodderPolicy): CampaignResult {
   const incr = Math.min(p.base, 0.1)
-  const bonus = p.park ? parkBonus(p.base) : 0
+  const bonus = (p.park ? parkBonus(p.base) : 0) + (p.extraBonus ?? 0)
   const fodderCost = p.fodderCost ?? p.cost
   let surv = 1
   let attempts = 0

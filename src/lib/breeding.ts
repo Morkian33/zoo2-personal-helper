@@ -8,13 +8,16 @@
 // (probability of failing k times in a row). S_0 = 1.
 //
 // Verified identical to the 14 tiers of the source Google Sheet (full precision).
-export function averageBreedingAttempts(baseProba: number): number {
+//
+// `extraBonus` is a flat additive on every attempt (guild breeding bonus): it
+// raises p_k but leaves the pity increment based on the raw base.
+export function averageBreedingAttempts(baseProba: number, extraBonus = 0): number {
   const incr = Math.min(baseProba, 0.1)
   let survival = 1
   let expected = 1 // S_0 term
   let k = 1
   while (true) {
-    const p = Math.min(baseProba + incr * (k - 1), 1)
+    const p = Math.min(baseProba + extraBonus + incr * (k - 1), 1)
     survival *= 1 - p
     expected += survival
     if (p >= 1) break

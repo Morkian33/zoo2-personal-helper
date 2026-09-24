@@ -4,7 +4,7 @@ import { int, dec2, signed, ownedLabel, norm } from '../lib/format'
 import { biomeLabel } from '../lib/labels'
 import { parseHours } from '../lib/duration'
 import { COOLDOWN_HOURS, bestPolicyLabel } from '../lib/breedingPlan'
-import { fodderCostFactor, type EventConfig } from '../lib/events'
+import { fodderCostFactor, guildBonusP, type EventConfig } from '../lib/events'
 import type { AnimalEntry, ShelterLevels, BiomeLabels } from '../lib/types'
 
 type SortDir = 'asc' | 'desc'
@@ -73,6 +73,7 @@ function breedRecoFor(e: AnimalEntry, wtp: number, maxAds: number, events: Event
       fodderCost: e.breed_cost * fodderCostFactor(events),
       cycleHours: (parseHours(e.breed_duration) ?? 0) + COOLDOWN_HOURS,
       park: false,
+      extraBonus: guildBonusP(events),
     },
     wtp,
     maxAds,

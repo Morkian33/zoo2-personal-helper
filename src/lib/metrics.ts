@@ -1,7 +1,7 @@
 import { optimalEnclosure } from './enclosure'
 import { averageBreedingAttempts } from './breeding'
 import { parseHours } from './duration'
-import { NO_EVENT, xpMultiplier, type EventConfig } from './events'
+import { NO_EVENT, xpMultiplier, type EventConfig, guildBonusP } from './events'
 import type { AnimalRow, AnimalMetrics } from './types'
 
 const COST_MULTIPLIER = 1
@@ -37,7 +37,9 @@ export function computeMetrics(a: AnimalRow, events: EventConfig = NO_EVENT): An
   const feedX2XpPerCoin = div(a.xp_feeding_value != null ? a.xp_feeding_value * xpMult : null, a.feed_x2_cost)
 
   const averageAttempts =
-    a.breed_proba != null && a.breed_proba > 0 ? averageBreedingAttempts(a.breed_proba) : null
+    a.breed_proba != null && a.breed_proba > 0
+      ? averageBreedingAttempts(a.breed_proba, guildBonusP(events))
+      : null
 
   // Each success yields `births` animals (twins/triplets events), so the expected
   // cost is shared across them.

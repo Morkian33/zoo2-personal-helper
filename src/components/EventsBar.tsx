@@ -1,4 +1,5 @@
-import { eventsActive, type EventConfig } from '../lib/events'
+import { eventsActive, NO_EVENT, type EventConfig } from '../lib/events'
+import { GuildBonusControl } from './GuildBonusControl'
 
 // Global toggles for the in-game limited-time events that change the economics
 // shown in Analyse and Élevage. Shown above the tabs; highlighted when active.
@@ -40,8 +41,11 @@ export function EventsBar({
         />
         XP ×2
       </label>
+      <span className="events-guild">
+        <GuildBonusControl events={events} setEvents={setEvents} />
+      </span>
       {active && (
-        <button className="link" onClick={() => setEvents({ fodder10: false, births: 1, xp2: false })}>
+        <button className="link" onClick={() => setEvents(NO_EVENT)}>
           Réinitialiser
         </button>
       )}

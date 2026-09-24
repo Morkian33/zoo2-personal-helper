@@ -409,6 +409,14 @@ button.link.danger {
   font-weight: 600;
   color: var(--muted);
 }
+.events-guild {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.guild-bar {
+  margin-bottom: 0;
+}
 .events-bar.active .events-title {
   color: #f5c518;
 }

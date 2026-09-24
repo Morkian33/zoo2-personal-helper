@@ -68,6 +68,7 @@ export function expectedOutcomes(
   currentP: number,
   pBase: number,
   scoreOf: (level: number) => number = (l) => l,
+  extraP = 0, // flat additive on every attempt (guild bonus); pity unaffected
 ): ExpectedOutcomes {
   if (groups.length === 0) return { score: 0, births: 0, maxLevelBirths: 0, maxLevel: 0 }
 
@@ -77,7 +78,8 @@ export function expectedOutcomes(
   const maxLevel = Math.max(...levels)
 
   const extraBoosts = groups.map(
-    (g) => (g.parkBonus ? parkBonus : 0) + (g.coinBoost ? pBase : 0) + (g.adBoost ? pBase : 0),
+    (g) =>
+      extraP + (g.parkBonus ? parkBonus : 0) + (g.coinBoost ? pBase : 0) + (g.adBoost ? pBase : 0),
   )
 
   // [score, expected births, expected maxLevel births]
@@ -120,6 +122,7 @@ export function analyseGroups(
   currentP: number,
   pBase: number,
   scoreOf: (level: number) => number = (l) => l,
+  extraP = 0, // flat additive on every attempt (guild bonus); pity unaffected
 ): number[] {
   if (groups.length === 0) return []
 
@@ -127,9 +130,10 @@ export function analyseGroups(
   const parkBonus = pairParkBonus(pBase)
   const levels = groups.map((g) => offspringLevel(g.levelA, g.levelB))
 
-  // Effective probability for group i at pity level p (park + configured fodder boosts).
+  // Effective probability for group i at pity level p (guild + park + configured fodder boosts).
   const extraBoosts = groups.map(
-    (g) => (g.parkBonus ? parkBonus : 0) + (g.coinBoost ? pBase : 0) + (g.adBoost ? pBase : 0),
+    (g) =>
+      extraP + (g.parkBonus ? parkBonus : 0) + (g.coinBoost ? pBase : 0) + (g.adBoost ? pBase : 0),
   )
 
   const memo = new Map<string, number>()

@@ -22,7 +22,8 @@ The UI is in French; the codebase (and these docs) are in English.
   one breeding cycle" (willingness-to-pay), accounting for the pity mechanic and the bonus
   park.
 - **Events bar** — global toggles for in-game events (fodder at 10%, guaranteed
-  twins/triplets, XP×2) that recompute the affected economics.
+  twins/triplets, XP×2, guild breeding bonus +2/4/6 %) that recompute the affected
+  economics. The guild bonus is also exposed at the head of the Élevage section.
 - **Admin** (admins only) — wiki sync (animals, variants, collections), per-animal editor,
   and FR-label editor (biomes, animal names, variant coats).
 
