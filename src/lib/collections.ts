@@ -76,12 +76,15 @@ export function parseCollections(wt: string): ParsedCollection[] {
     const rm = line.match(/^\*\s*Level\s*(\d+)\s*\[\[([^\]]+)\]\]\s*(?:\(([^)]+)\))?/)
     if (rm && cur) {
       const inner = rm[2]
-      let coat = rm[3] ?? null
-      if (!coat) {
-        const mm = (inner.split('|').pop() ?? '').match(/\(([^)]+)\)/)
+      const target = inner.split('|')[0].trim()
+      const display = inner.includes('|') ? (inner.split('|').pop() ?? '').trim() : null
+      let coat: string | null = rm[3] ?? null
+      if (!coat && display) {
+        const mm = display.match(/\(([^)]+)\)/)
         if (mm) coat = mm[1]
       }
-      cur.requirements.push({ level: Number(rm[1]), target: inner.split('|')[0].trim(), coat })
+      if (!coat && display) coat = coatFromDisplay(target, display)
+      cur.requirements.push({ level: Number(rm[1]), target, coat })
     }
   }
   return out
@@ -90,6 +93,20 @@ export function parseCollections(wt: string): ParsedCollection[] {
 // ---- Resolving requirements against our catalog ----
 function norm(c: string): string {
   return c.toLowerCase().replace(/-/g, ' ').replace(/&/g, 'and').replace(/\s+/g, ' ').trim()
+}
+
+// Some links carry the coat in the display text only, as a prefix or suffix of
+// the species name: `[[Domestic Goat|Domestic Goat White]]`,
+// `[[Peafowl|Piebald Peafowl]]`. Spelling variants of the species itself
+// (`[[Komodo dragon|Komodo Dragon]]`, `[[Red Ruffed Lemur|Red-Ruffed Lemur]]`)
+// normalise to the same string and yield no coat.
+function coatFromDisplay(target: string, display: string): string | null {
+  const t = norm(target)
+  const d = norm(display)
+  if (d === t) return null
+  if (d.startsWith(t + ' ')) return display.trim().slice(target.trim().length).trim()
+  if (d.endsWith(' ' + t)) return display.trim().slice(0, display.trim().length - target.trim().length).trim()
+  return null
 }
 
 // Collections-page coat names that differ from our Coat_Box coat names.
