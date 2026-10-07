@@ -29,7 +29,8 @@ create table if not exists public.animals (
   release_date             date,
   feed_x2_cost             numeric,   -- coins cost for the "feed x2" boost
   wiki_title               text,
-  url                      text
+  url                      text,
+  game_id                  text unique  -- in-game id, e.g. animal_kangaroo_giant_red (game import)
 );
 
 alter table public.animals enable row level security;
@@ -152,6 +153,7 @@ create table if not exists public.animal_variants (
   coat_name_fr  text,
   obtained_from text,
   release_date  date,
+  game_id       text unique,  -- in-game coat id, e.g. animal_bat_ghost_black (game import)
   unique (animal_id, coat_name)
 );
 alter table public.animal_variants enable row level security;

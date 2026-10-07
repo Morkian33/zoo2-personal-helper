@@ -13,6 +13,7 @@ import { CollectionsView } from './CollectionsView'
 import { BreedingPlanner } from './BreedingPlanner'
 import { BreedingOrderOptimizer } from './BreedingOrderOptimizer'
 import { SheltersPanel } from './SheltersPanel'
+import { GameImportPanel } from './GameImportPanel'
 import { AnalysisTable } from './AnalysisTable'
 import { InventoryTable } from './InventoryTable'
 import { AdminPanel } from './AdminPanel'
@@ -247,6 +248,7 @@ export function CatalogView({ userId }: { userId: string | null }) {
 
       {tab === 'zoo' && (
         <div className="myzoo">
+          <GameImportPanel userId={userId} entries={entries} onApplied={reload} />
           <SheltersPanel
             biomes={shelterBiomes}
             shelters={shelters}
