@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { applyGameImport } from '../lib/catalog'
-import { parseGameJson, planImport, type ImportPlan, type ParsedGame } from '../lib/gameImport'
+import { additiveOnly, parseGameJson, planImport, type ImportPlan, type ParsedGame } from '../lib/gameImport'
 import type { AnimalEntry } from '../lib/types'
 
 type Phase = 'closed' | 'input' | 'review' | 'applying' | 'done'
@@ -32,7 +32,8 @@ export function GameImportPanel({
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [parsed, setParsed] = useState<ParsedGame | null>(null)
-  const [plan, setPlan] = useState<ImportPlan | null>(null)
+  const [fullPlan, setPlan] = useState<ImportPlan | null>(null)
+  const [withRemovals, setWithRemovals] = useState(false)
   const [doneMsg, setDoneMsg] = useState('')
 
   function analyze(raw: string) {
@@ -89,6 +90,7 @@ export function GameImportPanel({
     setText('')
     setParsed(null)
     setPlan(null)
+    setWithRemovals(false)
     setError(null)
   }
 
@@ -111,6 +113,8 @@ export function GameImportPanel({
     )
   }
 
+  const plan = fullPlan && (withRemovals ? fullPlan : additiveOnly(fullPlan))
+  const removals = fullPlan?.animals.filter((c) => c.owned_count < c.entry.owned_count) ?? []
   const gained = plan?.animals.filter((c) => c.owned_count > c.entry.owned_count) ?? []
   const lost = plan?.animals.filter((c) => c.owned_count < c.entry.owned_count) ?? []
   const levelOnly = plan?.animals.filter((c) => c.owned_count === c.entry.owned_count) ?? []
@@ -180,6 +184,21 @@ export function GameImportPanel({
                 ))}
               </div>
             </details>
+          )}
+
+          {removals.length > 0 && phase === 'review' && (
+            <p className="status warning">
+              <label>
+                <input type="checkbox" checked={withRemovals} onChange={(e) => setWithRemovals(e.target.checked)} />{' '}
+                Appliquer aussi les retraits ({removals.length} espèce(s) absente(s) des parcs :{' '}
+                {removals.map((c) => label(c.entry)).join(', ')})
+              </label>
+              <br />
+              <span className="muted">
+                Le jeu ne liste que les animaux placés dans un parc : ceux en inventaire / transport n'y sont pas. Par
+                défaut l'import ne fait qu'ajouter ou monter (possédés, niveaux, pelages), jamais retirer.
+              </span>
+            </p>
           )}
 
           {lost.length > 0 && (

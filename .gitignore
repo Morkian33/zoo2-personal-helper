@@ -16,3 +16,4 @@ supabase/.temp
 # Game captures (HAR files contain session tokens) and screenshots
 *.har
 captures d'ecran*/
+zoo2-jsonrpc-*.json

@@ -218,3 +218,32 @@ export function planImport(parsed: ParsedGame, entries: AnimalEntry[]): ImportPl
   unknown.sort((a, b) => b.count - a.count)
   return { animals, variants, unknown, matchedSpecies: target.size }
 }
+
+// getAllParksOfUser only lists animals placed in a park: animals waiting in the
+// inventory / transport are missing from it. So by default the import only adds or
+// raises (owned count, level, coats) and never removes; removals are opt-in.
+export function additiveOnly(plan: ImportPlan): ImportPlan {
+  const animals = plan.animals
+    .map((c) => ({
+      ...c,
+      owned_count: Math.max(c.owned_count, c.entry.owned_count),
+      max_level: maxOrNull(c.max_level, c.entry.max_level),
+    }))
+    .filter((c) => c.owned_count !== c.entry.owned_count || c.max_level !== c.entry.max_level)
+  const variants = plan.variants
+    .map((c) => {
+      const cur = c.animal.variants.find((v) => v.id === c.variantId)
+      return { ...c, owned: c.owned || Boolean(cur?.owned), max_level: maxOrNull(c.max_level, cur?.max_level ?? null) }
+    })
+    .filter((c) => {
+      const cur = c.animal.variants.find((v) => v.id === c.variantId)
+      return c.owned !== Boolean(cur?.owned) || c.max_level !== (cur?.max_level ?? null)
+    })
+  return { ...plan, animals, variants }
+}
+
+function maxOrNull(a: number | null, b: number | null): number | null {
+  if (a == null) return b
+  if (b == null) return a
+  return Math.max(a, b)
+}

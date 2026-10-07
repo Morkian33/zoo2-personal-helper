@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Zoo 2 → zoo2-personal-helper
 // @namespace    https://morkian33.github.io/zoo2-personal-helper/
-// @version      1.0.2
+// @version      1.0.3
 // @description  Capte au chargement du jeu la réponse getAllParksOfUser (tes parcs, animaux, niveaux, pelages) et l'envoie au helper en un clic. Lecture seule : ne modifie rien et n'envoie rien au jeu.
 // @match        https://zoo2app.upjers.com/*
 // @run-at       document-start
@@ -20,6 +20,7 @@
   let payload = null // raw JSON text of the last getAllParksOfUser response
   let summary = 'en attente des données du jeu…'
   let rpcSeen = 0 // jsonrpc.php calls observed (diagnostic: 0 means the hooks see nothing)
+  const rpcLog = [] // every jsonrpc call of the session (request + response text), for the debug export
 
   const log = (...a) => console.log('[zoo2-helper]', ...a)
   log('script actif sur', location.href, window === window.top ? '(page principale)' : '(iframe)')
@@ -47,6 +48,25 @@
       renderPanel()
     }
     return true
+  }
+
+  function bodyText(body) {
+    if (body == null) return Promise.resolve('')
+    if (typeof body === 'string') return Promise.resolve(body)
+    if (typeof Blob !== 'undefined' && body instanceof Blob) return body.text()
+    return Promise.resolve(asText(body))
+  }
+
+  function record(reqPromise, resText) {
+    reqPromise
+      .catch(() => '')
+      .then((req) => {
+        let method = null
+        try {
+          method = JSON.parse(req).method || null
+        } catch (_) {}
+        rpcLog.push({ at: new Date().toISOString(), method, request: req, response: resText })
+      })
   }
 
   const typeOf = (v) => (v == null ? 'vide' : typeof v === 'string' ? 'texte' : Object.prototype.toString.call(v).slice(8, -1))
@@ -88,10 +108,14 @@
     const url = this.__zoo2HelperUrl
     if (String(url).includes('jsonrpc.php')) {
       const bodyType = typeOf(body)
+      const req = bodyText(body)
       this.addEventListener('load', () => {
         isRpc(url, 'XHR', bodyType, this.responseType)
         xhrText(this)
-          .then(capture)
+          .then((t) => {
+            record(req, t)
+            capture(t)
+          })
           .catch((e) => log('lecture réponse échouée', e))
       })
     }
@@ -106,7 +130,13 @@
       if (String(url).includes('jsonrpc.php')) {
         p.then((res) => {
           isRpc(url, 'fetch', typeOf(init && init.body), 'fetch')
-          return res.clone().text().then(capture)
+          return res
+            .clone()
+            .text()
+            .then((t) => {
+              record(bodyText(init && init.body), t)
+              capture(t)
+            })
         }).catch((e) => log('lecture réponse échouée', e))
       }
       return p
@@ -139,6 +169,21 @@
     }
   }
 
+  // Debug: downloads every jsonrpc call seen so far (too big for the DevTools console).
+  // The file holds your game data (no password): keep it local, do not publish it.
+  function exportLog() {
+    if (!rpcLog.length) return setStatus('Aucune requête captée pour l\'instant')
+    const blob = new Blob([JSON.stringify(rpcLog)], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'zoo2-jsonrpc-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.json'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000)
+    setStatus('Exporté : ' + rpcLog.length + ' requête(s) — ' + rpcLog.map((e) => e.method || '?').join(', '))
+  }
+
   // ---------- Small floating panel ----------
 
   let panel = null
@@ -165,10 +210,11 @@
       info.dataset.role = 'info'
       const send = button('Envoyer au helper', sendToHelper, true)
       const copy = button('Copier', copyPayload, false)
+      const dump = button('Exporter tout (debug)', exportLog, false)
       const close = button('×', () => panel.remove(), false)
       statusEl = document.createElement('span')
       statusEl.style.cssText = 'opacity:.75;width:100%'
-      panel.append(title, info, send, copy, close, statusEl)
+      panel.append(title, info, send, copy, dump, close, statusEl)
       document.body.appendChild(panel)
     }
     panel.querySelector('[data-role="info"]').textContent = summary
