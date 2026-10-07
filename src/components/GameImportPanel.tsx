@@ -157,8 +157,14 @@ export function GameImportPanel({
       {plan && parsed && phase !== 'input' && (
         <>
           <p>
-            {parsed.parks} parcs · <strong>{parsed.individuals}</strong> animaux · {plan.matchedSpecies} espèces
-            reconnues
+            {parsed.parks} parcs · <strong>{parsed.individuals}</strong> animaux placés
+            {parsed.storedIndividuals > 0 && (
+              <>
+                {' '}
+                + <strong>{parsed.storedIndividuals}</strong> en inventaire
+              </>
+            )}{' '}
+            · {plan.matchedSpecies} espèces reconnues
             {parsed.skippedRehab > 0 && <> · {parsed.skippedRehab} en soins (ignorés)</>}
           </p>
           <p>
@@ -190,13 +196,15 @@ export function GameImportPanel({
             <p className="status warning">
               <label>
                 <input type="checkbox" checked={withRemovals} onChange={(e) => setWithRemovals(e.target.checked)} />{' '}
-                Appliquer aussi les retraits ({removals.length} espèce(s) absente(s) des parcs :{' '}
+                Appliquer aussi les retraits ({removals.length} espèce(s) moins possédée(s) dans le jeu :{' '}
                 {removals.map((c) => label(c.entry)).join(', ')})
               </label>
               <br />
               <span className="muted">
-                Le jeu ne liste que les animaux placés dans un parc : ceux en inventaire / transport n'y sont pas. Par
-                défaut l'import ne fait qu'ajouter ou monter (possédés, niveaux, pelages), jamais retirer.
+                {parsed.storedIndividuals > 0
+                  ? "Inventaire inclus : ces espèces ne sont ni dans un parc ni en inventaire (des fragments d'animal ne comptent pas)."
+                  : "Sans l'inventaire (réponse collée à la main), les animaux non placés dans un parc n'apparaissent pas."}{' '}
+                Par défaut l'import ne fait qu'ajouter ou monter (possédés, niveaux, pelages), jamais retirer.
               </span>
             </p>
           )}

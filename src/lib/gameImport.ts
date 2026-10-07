@@ -3,7 +3,9 @@ import type { AnimalEntry } from './types'
 // Import of the player's zoo from the game's own data: the JSON response of the
 // game RPC `park.getAllParksOfUser` (copied from the browser DevTools, Network tab).
 // It lists every park (main zoo, secondary zoos, terrarium, aquarium…) with every
-// individual animal: species id, coat id, level. Read-only: nothing is sent to the game.
+// individual animal: species id, coat id, level. Animals not placed in a park live in
+// the inventory: `warehouse` of the `user.getUser` response, which the userscript adds
+// next to `parks`. Read-only: nothing is sent to the game.
 
 interface GameAnimal {
   animal_id: string
@@ -11,6 +13,14 @@ interface GameAnimal {
   level?: number
   is_rehab?: boolean
   is_healed?: boolean
+}
+
+// Inventory row: product_id "product_<species or coat game id>", count = individuals.
+// Rows ending in "_part" are puzzle fragments of an animal, not the animal itself.
+interface WarehouseRow {
+  product_id?: string
+  count?: number
+  info?: { level?: number; is_rehab?: boolean; is_healed?: boolean }
 }
 
 interface GamePark {
@@ -27,8 +37,10 @@ export interface GameTally {
 export interface ParsedGame {
   animals: Map<string, GameTally> // species id (all coats) -> tally
   variants: Map<string, GameTally> // coat id -> tally
+  stored: Map<string, GameTally> // inventory: species or coat id (unknown until matched) -> tally
   parks: number
   individuals: number
+  storedIndividuals: number
   skippedRehab: number // animals still being treated in the rehab station (not owned yet)
 }
 
@@ -60,7 +72,30 @@ export function parseGameJson(text: string): ParsedGame {
       if (a.variant_id) bump(variants, a.variant_id, level)
     }
   }
-  return { animals, variants, parks: parks.length, individuals, skippedRehab }
+  const stored = new Map<string, GameTally>()
+  let storedIndividuals = 0
+  for (const row of extractWarehouse(data) ?? []) {
+    const pid = row?.product_id
+    const count = typeof row?.count === 'number' ? row.count : 0
+    if (!pid || !pid.startsWith('product_animal_') || pid.endsWith('_part') || count <= 0) continue
+    if (row.info?.is_rehab && !row.info.is_healed) {
+      skippedRehab += count
+      continue
+    }
+    storedIndividuals += count
+    const level = typeof row.info?.level === 'number' ? row.info.level : 1
+    bump(stored, pid.slice('product_'.length), level, count)
+  }
+  return { animals, variants, stored, parks: parks.length, individuals, storedIndividuals, skippedRehab }
+}
+
+function extractWarehouse(data: unknown): WarehouseRow[] | null {
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const o = data as Record<string, unknown>
+    if (Array.isArray(o.warehouse)) return o.warehouse as WarehouseRow[]
+    if (o.result) return extractWarehouse(o.result)
+  }
+  return null
 }
 
 function extractParks(data: unknown): GamePark[] | null {
@@ -73,13 +108,13 @@ function extractParks(data: unknown): GamePark[] | null {
   return null
 }
 
-function bump(map: Map<string, GameTally>, id: string, level: number) {
+function bump(map: Map<string, GameTally>, id: string, level: number, n = 1) {
   const t = map.get(id)
   if (t) {
-    t.count++
+    t.count += n
     t.maxLevel = Math.max(t.maxLevel, level)
   } else {
-    map.set(id, { count: 1, maxLevel: level })
+    map.set(id, { count: n, maxLevel: level })
   }
 }
 
@@ -140,7 +175,18 @@ export function buildMatcher(entries: AnimalEntry[]) {
     return v ? { animal: species.entry, variantId: v.id } : null
   }
 
-  return { animal, variant }
+  // Inventory ids may be a species or a coat: explicit species id first, then coat, then
+  // the species word-match fallback.
+  function stored(gameId: string, speciesIds: Iterable<string>) {
+    const explicit = byGameId.get(gameId)
+    if (explicit) return { entry: explicit, guessed: false, variantId: null }
+    const v = variant(gameId, [...speciesIds, ...byGameId.keys()])
+    if (v) return { entry: v.animal, guessed: false, variantId: v.variantId }
+    const guess = animal(gameId)
+    return guess ? { ...guess, variantId: null } : null
+  }
+
+  return { animal, variant, stored }
 }
 
 // ---------- Diff against the current personal state ----------
@@ -188,13 +234,32 @@ export function planImport(parsed: ParsedGame, entries: AnimalEntry[]): ImportPl
   }
 
   const targetVar = new Map<number, GameTally>()
+  const addVar = (variantId: number, t: GameTally) => {
+    const prev = targetVar.get(variantId)
+    targetVar.set(variantId, { count: (prev?.count ?? 0) + t.count, maxLevel: Math.max(prev?.maxLevel ?? 0, t.maxLevel) })
+  }
   for (const [gameId, t] of parsed.variants) {
     const m = match.variant(gameId, parsed.animals.keys())
     if (!m) {
       unknown.push({ gameId, count: t.count, kind: 'coat' })
       continue
     }
-    targetVar.set(m.variantId, t)
+    addVar(m.variantId, t)
+  }
+
+  for (const [gameId, t] of parsed.stored) {
+    const m = match.stored(gameId, parsed.animals.keys())
+    if (!m) {
+      unknown.push({ gameId, count: t.count, kind: 'animal' })
+      continue
+    }
+    const prev = target.get(m.entry.id)
+    target.set(m.entry.id, {
+      count: (prev?.count ?? 0) + t.count,
+      maxLevel: Math.max(prev?.maxLevel ?? 0, t.maxLevel),
+      guessed: (prev?.guessed ?? false) || m.guessed,
+    })
+    if (m.variantId != null) addVar(m.variantId, t)
   }
 
   const animals: AnimalChange[] = []

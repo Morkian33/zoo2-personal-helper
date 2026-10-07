@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Zoo 2 → zoo2-personal-helper
 // @namespace    https://morkian33.github.io/zoo2-personal-helper/
-// @version      1.0.3
-// @description  Capte au chargement du jeu la réponse getAllParksOfUser (tes parcs, animaux, niveaux, pelages) et l'envoie au helper en un clic. Lecture seule : ne modifie rien et n'envoie rien au jeu.
+// @version      1.1.0
+// @description  Capte au chargement du jeu tes parcs (getAllParksOfUser) et ton inventaire d'animaux (getUser → warehouse) et les envoie au helper en un clic. Lecture seule : ne modifie rien et n'envoie rien au jeu.
 // @match        https://zoo2app.upjers.com/*
 // @run-at       document-start
 // @grant        none
@@ -17,7 +17,9 @@
   const HELPER_URL = 'https://morkian33.github.io/zoo2-personal-helper/'
   const HELPER_ORIGIN = new URL(HELPER_URL).origin
 
-  let payload = null // raw JSON text of the last getAllParksOfUser response
+  let payload = null // JSON text sent to the helper: {"result":{"parks":[...],"warehouse":[...]}}
+  let parks = null // result.parks of getAllParksOfUser
+  let warehouse = null // result.warehouse of getUser (inventory); only this field is kept from getUser
   let summary = 'en attente des données du jeu…'
   let rpcSeen = 0 // jsonrpc.php calls observed (diagnostic: 0 means the hooks see nothing)
   const rpcLog = [] // every jsonrpc call of the session (request + response text), for the debug export
@@ -65,7 +67,9 @@
         try {
           method = JSON.parse(req).method || null
         } catch (_) {}
-        rpcLog.push({ at: new Date().toISOString(), method, request: req, response: resText })
+        // loginAction carries the session token: never keep it in the export.
+        const secret = method === 'loginAction' || /"auth"\s*:/.test(resText || '')
+        rpcLog.push({ at: new Date().toISOString(), method, request: req, response: secret ? '[masqué]' : resText })
       })
   }
 
@@ -81,20 +85,33 @@
   }
 
   function capture(text) {
-    if (!text || !text.includes('"parks"')) return
-    let parks
+    if (!text || !(text.includes('"parks"') || text.includes('"warehouse"'))) return
+    let result
     try {
       const data = JSON.parse(text)
-      parks = data && data.result && data.result.parks
+      result = data && data.result
     } catch (e) {
-      log('réponse getAllParksOfUser illisible (' + text.length + ' caractères)', e)
+      log('réponse illisible (' + text.length + ' caractères)', e)
       return
     }
-    if (!Array.isArray(parks)) return log('réponse sans result.parks')
-    const animals = parks.reduce((n, p) => n + ((p && p.animals && p.animals.length) || 0), 0)
-    log('getAllParksOfUser capté :', parks.length, 'parcs,', animals, 'animaux')
-    payload = text
-    summary = parks.length + ' parcs · ' + animals + ' animaux'
+    if (!result) return
+    if (Array.isArray(result.parks)) {
+      parks = result.parks
+      log('getAllParksOfUser capté :', parks.length, 'parcs')
+    }
+    if (Array.isArray(result.warehouse)) {
+      warehouse = result.warehouse
+      log('inventaire capté :', warehouse.length, 'lignes')
+    }
+    if (!parks) return
+    const placed = parks.reduce((n, p) => n + ((p && p.animals && p.animals.length) || 0), 0)
+    const stored = (warehouse || []).reduce((n, r) => {
+      const id = (r && r.product_id) || ''
+      return id.startsWith('product_animal_') && !id.endsWith('_part') ? n + (r.count || 0) : n
+    }, 0)
+    payload = JSON.stringify({ result: warehouse ? { parks, warehouse } : { parks } })
+    summary =
+      parks.length + ' parcs · ' + placed + ' animaux' + (warehouse ? ' + ' + stored + ' en inventaire' : ' (inventaire pas encore vu)')
     renderPanel()
   }
 
