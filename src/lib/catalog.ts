@@ -156,6 +156,28 @@ export async function setUserVariant(
   if (error) throw error
 }
 
+// Batch-applies an import from the game (owned counts, max levels, coats) in two upserts.
+// Favorites are preserved: they are passed through from the current state.
+export async function applyGameImport(
+  userId: string,
+  animals: { animal_id: number; owned_count: number; max_level: number | null; favorite: boolean }[],
+  variants: { variant_id: number; owned: boolean; max_level: number | null }[],
+): Promise<void> {
+  const updated_at = new Date().toISOString()
+  if (animals.length) {
+    const { error } = await supabase
+      .from('user_animals')
+      .upsert(animals.map((a) => ({ user_id: userId, ...a, updated_at })), { onConflict: 'user_id,animal_id' })
+    if (error) throw error
+  }
+  if (variants.length) {
+    const { error } = await supabase
+      .from('user_variants')
+      .upsert(variants.map((v) => ({ user_id: userId, ...v, updated_at })), { onConflict: 'user_id,variant_id' })
+    if (error) throw error
+  }
+}
+
 // Sets the current user's shelter for a biome (null level = not owned, removes the row).
 export async function setUserShelter(
   userId: string,

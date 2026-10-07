@@ -14,6 +14,11 @@ The UI is in French; the codebase (and these docs) are in English.
   feed×2 value, recommended fodder strategy). Per-column show/hide picker, favorites star
   + filter, persisted filters.
 - **Mon zoo** — data entry: owned count, max level, variant coats owned, shelter levels.
+  **Importer depuis le jeu**: paste the game's `park.getAllParksOfUser` JSON response
+  (DevTools → Network → `jsonrpc.php`) to sync owned counts, max levels and coats from
+  every park at once, with a diff preview before writing. In-game ids are mapped through
+  `animals.game_id` / `animal_variants.game_id` (`supabase/migration_game_ids.sql`), with a
+  strict word-match fallback; unrecognised ids are listed and ignored. Read-only towards the game.
   Star animals as favorites.
 - **Collections** — completion tracking with a "reachable / blocked" status, a hide-done
   toggle, and recommendations of the top animals to level up / unlock to advance the most
@@ -70,6 +75,9 @@ On an existing DB, also run once (both already part of `schema.sql` for a fresh 
   the "Supprimer mon compte" button.
 - `supabase/migration_breeding_state.sql` — `user_breeding_session` /
   `user_breeding_configs`, the server-side state of the "Ordre d'élevage" tab.
+- `supabase/migration_game_ids.sql` — `game_id` columns + the in-game id mapping used by
+  "Importer depuis le jeu". Run it after the seeds on a fresh DB too: `schema.sql` only
+  declares the columns, the mapping data lives in this file.
 
 Then populate collections from the **Admin → Synchronisation** tab (wiki sync); there is
 no collections seed. Variants and new animals are also kept up to date via the same admin

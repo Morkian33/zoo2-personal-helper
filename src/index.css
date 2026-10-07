@@ -1111,3 +1111,28 @@ table.breed-order-expect tbody tr.active .breed-order-expect-name {
 .breeding-tabs .subtabs {
   margin-bottom: 0.5rem;
 }
+
+/* "Mon zoo" — import from the game's getAllParksOfUser JSON */
+.game-import-text {
+  width: 100%;
+  min-height: 120px;
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #11141a;
+  color: var(--text);
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  box-sizing: border-box;
+}
+.game-import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+.small-file {
+  font-size: 0.85rem;
+  color: var(--muted);
+}

@@ -24,6 +24,7 @@ export interface AnimalRow {
   feed_x2_cost: number | null
   wiki_title: string | null
   url: string | null
+  game_id: string | null
 }
 
 // Derived metrics (recomputed in-app from the raw row + game models).
@@ -69,6 +70,7 @@ export interface VariantRow {
   coat_name_fr: string | null
   obtained_from: string | null
   release_date: string | null
+  game_id: string | null
 }
 
 // Global biome label lookup (name_en -> name_fr).
