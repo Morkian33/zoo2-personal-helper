@@ -7,6 +7,8 @@ React + Vite + TypeScript, data and auth via Supabase.
 
 The UI is in French; the codebase (and these docs) are in English.
 
+Game sync (import from the game, inventory, money study) — status and next steps: [`GAME_SYNC.md`](GAME_SYNC.md).
+
 ## Features
 
 - **Analyse** — sortable catalog table of decision metrics (XP/day, XP/h per adjusted

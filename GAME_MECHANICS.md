@@ -103,3 +103,8 @@ Exemple bats (4 %) : seuil = 20 %
 - Prix de revente d'un niveau 1 : `base_selling_price`.
 - Prix de revente d'un niveau 20 : `base_selling_price × 1.95`.
 - Delta économique d'élevage = `price_value − coût_moyen_naissance`.
+
+## Argent des guichets et boutiques (à l'étude)
+
+- S'accumule hors connexion jusqu'à un plafond (`money_cap` / `max_money`).
+- Règles de remplissage encore inconnues : étude en cours, voir `GAME_SYNC.md` § 2.
