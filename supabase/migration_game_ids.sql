@@ -99,6 +99,7 @@ update public.animals a set game_id = m.game_id from (values
   ('animal_lynx_canadian', 'Canadian Lynx'),
   ('animal_impala', 'Impala'),
   ('animal_peacock_pheasant_gray', 'Gray Peacock-Pheasant'),
+  ('animal_jackal_striped', 'Black-Backed Jackal'),
   ('animal_oryx_scimitar', 'Scimitar Oryx'),
   ('animal_ostrich', 'Common Ostrich'),
   ('animal_owl_white_faced', 'White-Faced Owl'),
