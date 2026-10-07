@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { applyGameImport } from '../lib/catalog'
 import { parseGameJson, planImport, type ImportPlan, type ParsedGame } from '../lib/gameImport'
 import type { AnimalEntry } from '../lib/types'
 
 type Phase = 'closed' | 'input' | 'review' | 'applying' | 'done'
+
+// Userscript served by GitHub Pages from public/ (Tampermonkey offers to install a *.user.js URL).
+const USERSCRIPT_URL = `${import.meta.env.BASE_URL}zoo2-helper-bridge.user.js`
 
 const label = (e: AnimalEntry) => e.name_fr ?? e.name_en
 const lvl = (v: number | null) => (v == null ? '∅' : String(v))
@@ -16,10 +19,14 @@ export function GameImportPanel({
   userId,
   entries,
   onApplied,
+  incoming,
+  onIncomingConsumed,
 }: {
   userId: string | null
   entries: AnimalEntry[]
   onApplied: () => Promise<void>
+  incoming?: string | null // JSON pushed by the game userscript, analyzed once the catalog is loaded
+  onIncomingConsumed?: () => void
 }) {
   const [phase, setPhase] = useState<Phase>('closed')
   const [text, setText] = useState('')
@@ -39,6 +46,13 @@ export function GameImportPanel({
       setError(e instanceof Error ? e.message : 'Lecture impossible')
     }
   }
+
+  useEffect(() => {
+    if (!incoming || !entries.length) return
+    setText('')
+    analyze(incoming)
+    onIncomingConsumed?.()
+  }, [incoming, entries.length])
 
   async function onFile(file: File | undefined) {
     if (!file) return
@@ -85,6 +99,14 @@ export function GameImportPanel({
           Importer depuis le jeu
         </button>
         {!userId && <span className="muted"> (connecte-toi pour importer)</span>}
+        <span className="muted">
+          {' '}
+          · en 2 clics depuis le jeu :{' '}
+          <a href={USERSCRIPT_URL} target="_blank" rel="noreferrer">
+            installer le script
+          </a>{' '}
+          (Tampermonkey / Violentmonkey)
+        </span>
       </div>
     )
   }
