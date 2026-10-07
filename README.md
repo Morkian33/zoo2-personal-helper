@@ -26,7 +26,7 @@ The UI is in French; the codebase (and these docs) are in English.
   `*_part` rows are fragments, not animals), and shows an "Envoyer au helper" button. It also keeps,
   in the game page's localStorage, a money snapshot at each game load (per park: till, shops'
   money / cap / upgrade, shared `purchase_info` pool, `last_sim_update`) and the game actions seen in
-  between, exported with "Exporter relevés" to study how tills and shops fill. The button which opens the helper (`?from=game`) and hands the JSON over
+  between, exported with "Exporter relevés" to study how tills and shops fill. "Envoyer au helper" opens the helper (`?from=game`) and hands the JSON over
   by `postMessage` (origin-checked both ways, `src/lib/gameBridge.ts`); the preview then opens directly.
   Star animals as favorites.
 - **Collections** — completion tracking with a "reachable / blocked" status, a hide-done
