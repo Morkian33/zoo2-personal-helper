@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Zoo 2 → zoo2-personal-helper
 // @namespace    https://morkian33.github.io/zoo2-personal-helper/
-// @version      1.0.1
+// @version      1.0.2
 // @description  Capte au chargement du jeu la réponse getAllParksOfUser (tes parcs, animaux, niveaux, pelages) et l'envoie au helper en un clic. Lecture seule : ne modifie rien et n'envoie rien au jeu.
 // @match        https://zoo2app.upjers.com/*
 // @run-at       document-start
@@ -16,7 +16,6 @@
 
   const HELPER_URL = 'https://morkian33.github.io/zoo2-personal-helper/'
   const HELPER_ORIGIN = new URL(HELPER_URL).origin
-  const METHOD = '"getAllParksOfUser"'
 
   let payload = null // raw JSON text of the last getAllParksOfUser response
   let summary = 'en attente des données du jeu…'
@@ -37,21 +36,32 @@
     return ''
   }
 
-  function isParksRequest(url, body, via) {
+  // Every jsonrpc.php call is inspected on its *response* (whatever the request body
+  // format): the one carrying result.parks is getAllParksOfUser.
+  function isRpc(url, via, bodyType, responseType) {
     if (!String(url).includes('jsonrpc.php')) return false
     rpcSeen++
-    const text = asText(body)
-    const method = (text.match(/"method"\s*:\s*"([^"]+)"/) || [])[1] || '?'
-    log('jsonrpc vu via', via, '→', method, typeof body === 'string' ? '' : '(corps ' + Object.prototype.toString.call(body) + ')')
+    log('jsonrpc #' + rpcSeen, 'via', via, '| corps', bodyType, '| réponse', responseType || 'text')
     if (!payload) {
       summary = 'en attente… (' + rpcSeen + ' requête(s) jeu vue(s))'
       renderPanel()
     }
-    return text.includes(METHOD)
+    return true
+  }
+
+  const typeOf = (v) => (v == null ? 'vide' : typeof v === 'string' ? 'texte' : Object.prototype.toString.call(v).slice(8, -1))
+
+  // Response of an XHR as text, for every responseType ('' / text / arraybuffer / blob / json).
+  function xhrText(xhr) {
+    const rt = xhr.responseType
+    if (rt === '' || rt === 'text') return Promise.resolve(xhr.responseText)
+    if (rt === 'json') return Promise.resolve(xhr.response == null ? '' : JSON.stringify(xhr.response))
+    if (rt === 'blob' && xhr.response && typeof xhr.response.text === 'function') return xhr.response.text()
+    return Promise.resolve(asText(xhr.response))
   }
 
   function capture(text) {
-    if (!text) return
+    if (!text || !text.includes('"parks"')) return
     let parks
     try {
       const data = JSON.parse(text)
@@ -75,10 +85,14 @@
     return xhrOpen.apply(this, arguments)
   }
   XMLHttpRequest.prototype.send = function (body) {
-    if (isParksRequest(this.__zoo2HelperUrl, body, 'XHR')) {
+    const url = this.__zoo2HelperUrl
+    if (String(url).includes('jsonrpc.php')) {
+      const bodyType = typeOf(body)
       this.addEventListener('load', () => {
-        const rt = this.responseType
-        capture(rt === '' || rt === 'text' ? this.responseText : asText(this.response))
+        isRpc(url, 'XHR', bodyType, this.responseType)
+        xhrText(this)
+          .then(capture)
+          .catch((e) => log('lecture réponse échouée', e))
       })
     }
     return xhrSend.apply(this, arguments)
@@ -88,19 +102,13 @@
   if (origFetch) {
     window.fetch = function (input, init) {
       const url = typeof input === 'string' ? input : input && input.url
-      // Body: in init, or inside a Request object (readable only asynchronously, from a clone).
-      const bodyPromise =
-        init && init.body != null
-          ? Promise.resolve(init.body)
-          : input && typeof input === 'object' && typeof input.clone === 'function' && String(url).includes('jsonrpc.php')
-            ? input.clone().text().catch(() => '')
-            : Promise.resolve(null)
       const p = origFetch.apply(this, arguments)
-      bodyPromise.then((body) => {
-        if (isParksRequest(url, body, 'fetch')) {
-          p.then((res) => res.clone().text().then(capture)).catch((e) => log('lecture réponse échouée', e))
-        }
-      })
+      if (String(url).includes('jsonrpc.php')) {
+        p.then((res) => {
+          isRpc(url, 'fetch', typeOf(init && init.body), 'fetch')
+          return res.clone().text().then(capture)
+        }).catch((e) => log('lecture réponse échouée', e))
+      }
       return p
     }
   }
