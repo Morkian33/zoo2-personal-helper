@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Zoo 2 → zoo2-personal-helper
 // @namespace    https://morkian33.github.io/zoo2-personal-helper/
-// @version      1.1.0
+// @version      1.2.0
 // @description  Capte au chargement du jeu tes parcs (getAllParksOfUser) et ton inventaire d'animaux (getUser → warehouse) et les envoie au helper en un clic. Lecture seule : ne modifie rien et n'envoie rien au jeu.
 // @match        https://zoo2app.upjers.com/*
 // @run-at       document-start
@@ -70,7 +70,107 @@
         // loginAction carries the session token: never keep it in the export.
         const secret = method === 'loginAction' || /"auth"\s*:/.test(resText || '')
         rpcLog.push({ at: new Date().toISOString(), method, request: req, response: secret ? '[masqué]' : resText })
+        if (!secret && method && !LOAD_METHODS.has(method)) recordEvent(method, req, resText)
       })
+  }
+
+  // ---------- Money study: snapshots of tills and shops, kept in this browser ----------
+  // At every game load: per park, the till, every shop (money / cap / upgrade) and the
+  // park's shared purchase pool. Between loads: the game's own actions (collecting,
+  // feeding...), method + request/response trimmed, to date the collections.
+  const SNAP_KEY = 'zoo2-helper-money-snapshots'
+  const EVENT_KEY = 'zoo2-helper-money-events'
+  const LOAD_METHODS = new Set([
+    'getResourceConfig', 'validateVersionLocalized', 'getSupportedLanguages', 'sendStatus', 'getUser',
+    'getRankingStatistics', 'getProductCollectionProgress', 'getFriends', 'getGuild', 'throwException',
+    'getAllParksOfUser', 'getFirstPaymentItems',
+  ])
+
+  function readList(key) {
+    try {
+      const v = JSON.parse(localStorage.getItem(key) || '[]')
+      return Array.isArray(v) ? v : []
+    } catch (_) {
+      return []
+    }
+  }
+
+  function appendList(key, item, max) {
+    let list = readList(key)
+    list.push(item)
+    if (list.length > max) list = list.slice(list.length - max)
+    for (;;) {
+      try {
+        localStorage.setItem(key, JSON.stringify(list))
+        return list.length
+      } catch (_) {
+        if (list.length < 2) return 0 // storage unavailable
+        list = list.slice(Math.floor(list.length / 2)) // quota: drop the oldest half
+      }
+    }
+  }
+
+  const trim = (t) => String(t || '').replace(/"hash":"[^"]*"/g, '"hash":"-"').slice(0, 800)
+
+  function recordEvent(method, req, res) {
+    appendList(EVENT_KEY, { at: new Date().toISOString(), method, request: trim(req), response: trim(res) }, 1500)
+  }
+
+  function recordSnapshot(parkList) {
+    const num = (v) => (v == null || v === '' ? null : Number(v))
+    const snap = {
+      at: new Date().toISOString(),
+      parks: parkList.map((p) => {
+        const tills = []
+        const shops = []
+        for (const b of (p && p.buildings) || []) {
+          if (b.ticket_office_info) {
+            tills.push({ id: b.building_id, stage: b.upgrade_stage ?? null, money: num(b.ticket_office_info.money), cap: num(b.ticket_office_info.max_money) })
+          }
+          if (b.store_info) {
+            shops.push({
+              id: b.building_id,
+              oid: b._id && b._id.$oid,
+              stage: b.upgrade_stage ?? null,
+              entrance: b.connected_to_entrance ?? null,
+              money: num(b.store_info.money),
+              cap: num(b.store_info.money_cap),
+            })
+          }
+        }
+        const pool = {}
+        for (const t of (p && p.purchase_info && p.purchase_info.purchase_types) || []) pool[t.type] = num(t.value)
+        return {
+          template: p && p.template_id,
+          last_sim_update: p && p.last_sim_update,
+          pending_waste: num(p && p.pending_waste),
+          animals: ((p && p.animals) || []).length,
+          pool,
+          tills,
+          shops,
+        }
+      }),
+    }
+    const n = appendList(SNAP_KEY, snap, 400)
+    log('relevé argent enregistré (' + n + ' au total)')
+  }
+
+  function exportMoney() {
+    const data = { exported: new Date().toISOString(), snapshots: readList(SNAP_KEY), events: readList(EVENT_KEY) }
+    if (!data.snapshots.length) return setStatus("Aucun relevé pour l'instant")
+    download('zoo2-releves-argent', data)
+    setStatus('Exporté : ' + data.snapshots.length + ' relevé(s), ' + data.events.length + ' action(s)')
+  }
+
+  function download(name, data) {
+    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = name + '-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.json'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000)
   }
 
   const typeOf = (v) => (v == null ? 'vide' : typeof v === 'string' ? 'texte' : Object.prototype.toString.call(v).slice(8, -1))
@@ -98,6 +198,11 @@
     if (Array.isArray(result.parks)) {
       parks = result.parks
       log('getAllParksOfUser capté :', parks.length, 'parcs')
+      try {
+        recordSnapshot(parks)
+      } catch (e) {
+        log('relevé argent impossible', e)
+      }
     }
     if (Array.isArray(result.warehouse)) {
       warehouse = result.warehouse
@@ -189,15 +294,8 @@
   // Debug: downloads every jsonrpc call seen so far (too big for the DevTools console).
   // The file holds your game data (no password): keep it local, do not publish it.
   function exportLog() {
-    if (!rpcLog.length) return setStatus('Aucune requête captée pour l\'instant')
-    const blob = new Blob([JSON.stringify(rpcLog)], { type: 'application/json' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = 'zoo2-jsonrpc-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.json'
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    setTimeout(() => URL.revokeObjectURL(a.href), 10000)
+    if (!rpcLog.length) return setStatus("Aucune requête captée pour l'instant")
+    download('zoo2-jsonrpc', rpcLog)
     setStatus('Exporté : ' + rpcLog.length + ' requête(s) — ' + rpcLog.map((e) => e.method || '?').join(', '))
   }
 
@@ -227,11 +325,12 @@
       info.dataset.role = 'info'
       const send = button('Envoyer au helper', sendToHelper, true)
       const copy = button('Copier', copyPayload, false)
+      const money = button('Exporter relevés', exportMoney, false)
       const dump = button('Exporter tout (debug)', exportLog, false)
       const close = button('×', () => panel.remove(), false)
       statusEl = document.createElement('span')
       statusEl.style.cssText = 'opacity:.75;width:100%'
-      panel.append(title, info, send, copy, dump, close, statusEl)
+      panel.append(title, info, send, copy, money, dump, close, statusEl)
       document.body.appendChild(panel)
     }
     panel.querySelector('[data-role="info"]').textContent = summary

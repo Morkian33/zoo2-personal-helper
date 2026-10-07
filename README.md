@@ -23,7 +23,10 @@ The UI is in French; the codebase (and these docs) are in English.
   Two-click variant: the userscript `public/zoo2-helper-bridge.user.js` (served by Pages, install
   it with Tampermonkey / Violentmonkey) passively captures that response when the game loads, plus
   the animal inventory (`warehouse` of the `user.getUser` response: animals not placed in a park;
-  `*_part` rows are fragments, not animals), and shows an "Envoyer au helper" button, which opens the helper (`?from=game`) and hands the JSON over
+  `*_part` rows are fragments, not animals), and shows an "Envoyer au helper" button. It also keeps,
+  in the game page's localStorage, a money snapshot at each game load (per park: till, shops'
+  money / cap / upgrade, shared `purchase_info` pool, `last_sim_update`) and the game actions seen in
+  between, exported with "Exporter relevés" to study how tills and shops fill. The button which opens the helper (`?from=game`) and hands the JSON over
   by `postMessage` (origin-checked both ways, `src/lib/gameBridge.ts`); the preview then opens directly.
   Star animals as favorites.
 - **Collections** — completion tracking with a "reachable / blocked" status, a hide-done
