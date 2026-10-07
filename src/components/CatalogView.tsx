@@ -14,6 +14,7 @@ import { BreedingPlanner } from './BreedingPlanner'
 import { BreedingOrderOptimizer } from './BreedingOrderOptimizer'
 import { SheltersPanel } from './SheltersPanel'
 import { GameImportPanel } from './GameImportPanel'
+import { listenForGameImport, openedForGameImport } from '../lib/gameBridge'
 import { AnalysisTable } from './AnalysisTable'
 import { InventoryTable } from './InventoryTable'
 import { AdminPanel } from './AdminPanel'
@@ -62,6 +63,17 @@ export function CatalogView({ userId }: { userId: string | null }) {
     () => (eventsActive(events) ? entries.map((e) => ({ ...e, metrics: computeMetrics(e, events) })) : entries),
     [entries, events],
   )
+
+  // Data pushed by the game userscript (public/zoo2-helper-bridge.user.js): open
+  // "Mon zoo" and hand it to the import panel, which shows the preview.
+  const [gameJson, setGameJson] = useState<string | null>(null)
+  useEffect(() => {
+    if (!openedForGameImport()) return
+    return listenForGameImport((json) => {
+      setTab('zoo')
+      setGameJson(json)
+    })
+  }, [])
 
   // From the FR-labels tab: jump to the Animaux tab with this animal loaded.
   function editAnimal(id: number) {
@@ -248,7 +260,13 @@ export function CatalogView({ userId }: { userId: string | null }) {
 
       {tab === 'zoo' && (
         <div className="myzoo">
-          <GameImportPanel userId={userId} entries={entries} onApplied={reload} />
+          <GameImportPanel
+            userId={userId}
+            entries={entries}
+            onApplied={reload}
+            incoming={gameJson}
+            onIncomingConsumed={() => setGameJson(null)}
+          />
           <SheltersPanel
             biomes={shelterBiomes}
             shelters={shelters}

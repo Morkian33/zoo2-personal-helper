@@ -19,6 +19,10 @@ The UI is in French; the codebase (and these docs) are in English.
   every park at once, with a diff preview before writing. In-game ids are mapped through
   `animals.game_id` / `animal_variants.game_id` (`supabase/migration_game_ids.sql`), with a
   strict word-match fallback; unrecognised ids are listed and ignored. Read-only towards the game.
+  Two-click variant: the userscript `public/zoo2-helper-bridge.user.js` (served by Pages, install
+  it with Tampermonkey / Violentmonkey) passively captures that response when the game loads and
+  shows an "Envoyer au helper" button, which opens the helper (`?from=game`) and hands the JSON over
+  by `postMessage` (origin-checked both ways, `src/lib/gameBridge.ts`); the preview then opens directly.
   Star animals as favorites.
 - **Collections** — completion tracking with a "reachable / blocked" status, a hide-done
   toggle, and recommendations of the top animals to level up / unlock to advance the most
