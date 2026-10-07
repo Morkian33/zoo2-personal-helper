@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         Zoo 2 → zoo2-personal-helper
 // @namespace    https://morkian33.github.io/zoo2-personal-helper/
-// @version      1.0.0
+// @version      1.0.1
 // @description  Capte au chargement du jeu la réponse getAllParksOfUser (tes parcs, animaux, niveaux, pelages) et l'envoie au helper en un clic. Lecture seule : ne modifie rien et n'envoie rien au jeu.
 // @match        https://zoo2app.upjers.com/*
 // @run-at       document-start
 // @grant        none
+// @inject-into  page
 // @updateURL    https://morkian33.github.io/zoo2-personal-helper/zoo2-helper-bridge.user.js
 // @downloadURL  https://morkian33.github.io/zoo2-personal-helper/zoo2-helper-bridge.user.js
 // ==/UserScript==
@@ -18,7 +19,11 @@
   const METHOD = '"getAllParksOfUser"'
 
   let payload = null // raw JSON text of the last getAllParksOfUser response
-  let summary = ''
+  let summary = 'en attente des données du jeu…'
+  let rpcSeen = 0 // jsonrpc.php calls observed (diagnostic: 0 means the hooks see nothing)
+
+  const log = (...a) => console.log('[zoo2-helper]', ...a)
+  log('script actif sur', location.href, window === window.top ? '(page principale)' : '(iframe)')
 
   // ---------- Capture (passive: wraps XHR / fetch, reads the response, changes nothing) ----------
 
@@ -32,8 +37,17 @@
     return ''
   }
 
-  function isParksRequest(url, body) {
-    return String(url).includes('jsonrpc.php') && asText(body).includes(METHOD)
+  function isParksRequest(url, body, via) {
+    if (!String(url).includes('jsonrpc.php')) return false
+    rpcSeen++
+    const text = asText(body)
+    const method = (text.match(/"method"\s*:\s*"([^"]+)"/) || [])[1] || '?'
+    log('jsonrpc vu via', via, '→', method, typeof body === 'string' ? '' : '(corps ' + Object.prototype.toString.call(body) + ')')
+    if (!payload) {
+      summary = 'en attente… (' + rpcSeen + ' requête(s) jeu vue(s))'
+      renderPanel()
+    }
+    return text.includes(METHOD)
   }
 
   function capture(text) {
@@ -42,11 +56,13 @@
     try {
       const data = JSON.parse(text)
       parks = data && data.result && data.result.parks
-    } catch (_) {
+    } catch (e) {
+      log('réponse getAllParksOfUser illisible (' + text.length + ' caractères)', e)
       return
     }
-    if (!Array.isArray(parks)) return
+    if (!Array.isArray(parks)) return log('réponse sans result.parks')
     const animals = parks.reduce((n, p) => n + ((p && p.animals && p.animals.length) || 0), 0)
+    log('getAllParksOfUser capté :', parks.length, 'parcs,', animals, 'animaux')
     payload = text
     summary = parks.length + ' parcs · ' + animals + ' animaux'
     renderPanel()
@@ -59,7 +75,7 @@
     return xhrOpen.apply(this, arguments)
   }
   XMLHttpRequest.prototype.send = function (body) {
-    if (isParksRequest(this.__zoo2HelperUrl, body)) {
+    if (isParksRequest(this.__zoo2HelperUrl, body, 'XHR')) {
       this.addEventListener('load', () => {
         const rt = this.responseType
         capture(rt === '' || rt === 'text' ? this.responseText : asText(this.response))
@@ -72,10 +88,19 @@
   if (origFetch) {
     window.fetch = function (input, init) {
       const url = typeof input === 'string' ? input : input && input.url
+      // Body: in init, or inside a Request object (readable only asynchronously, from a clone).
+      const bodyPromise =
+        init && init.body != null
+          ? Promise.resolve(init.body)
+          : input && typeof input === 'object' && typeof input.clone === 'function' && String(url).includes('jsonrpc.php')
+            ? input.clone().text().catch(() => '')
+            : Promise.resolve(null)
       const p = origFetch.apply(this, arguments)
-      if (isParksRequest(url, init && init.body)) {
-        p.then((res) => res.clone().text().then(capture)).catch(() => {})
-      }
+      bodyPromise.then((body) => {
+        if (isParksRequest(url, body, 'fetch')) {
+          p.then((res) => res.clone().text().then(capture)).catch((e) => log('lecture réponse échouée', e))
+        }
+      })
       return p
     }
   }
@@ -150,4 +175,7 @@
     b.addEventListener('click', onClick)
     return b
   }
+
+  // Show the panel right away in the main page, so it is visible that the script runs.
+  if (window === window.top) renderPanel()
 })()
